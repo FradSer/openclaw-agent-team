@@ -420,23 +420,203 @@ sequenceDiagram
 
 ### Message Delivery Flow
 
+OpenClaw uses **Heartbeat Wake + Context Injection** mechanism for inter-agent messaging:
+
 ```mermaid
 sequenceDiagram
-    participant Sender
-    participant Mailbox
-    participant FileSystem
-    participant Recipient
+    participant Sender as Team Lead
+    participant Mailbox as JSONL Inbox
+    participant Heartbeat as Heartbeat Wake
+    participant Teammate as Teammate Agent
+    participant Context as Context Injection
 
-    Sender->>Mailbox: send("researcher", "Focus on API")
-    Mailbox->>FileSystem: append to researcher.jsonl
-    FileSystem-->>Mailbox: written
-    Mailbox-->>Sender: { messageId }
-    Note over Recipient: Polls inbox
-    Recipient->>Mailbox: readInbox()
-    Mailbox->>FileSystem: read researcher.jsonl
-    FileSystem-->>Mailbox: messages
-    Mailbox-->>Recipient: [message1, message2]
+    Sender->>Mailbox: send_message("researcher", "Focus on API")
+    Note over Mailbox: Write to inbox/researcher/messages.jsonl
+    Mailbox->>Heartbeat: requestHeartbeatNow(sessionKey)
+    Note over Heartbeat: Schedule wake for teammate session
+    Heartbeat->>Teammate: Wake session (after coalesce delay)
+    Teammate->>Context: before_prompt_build hook fires
+    Context->>Mailbox: readInboxMessages()
+    Mailbox-->>Context: [message1, message2]
+    Context->>Context: Convert to XML format
+    Context-->>Teammate: prependContext injected to system prompt
+    Note over Teammate: Messages appear in context
+    Context->>Mailbox: clearInboxMessages()
 ```
+
+### 8. Context Injection Hook (src/context-injection.ts)
+
+**Responsibility**: Inject pending messages into teammate's context on heartbeat wake.
+
+```typescript
+import type { PluginHookAgentContext, PluginHookBeforePromptBuildResult } from "openclaw/plugin-sdk";
+import { readInboxMessages, clearInboxMessages } from "./mailbox.js";
+import { getTeamsBaseDir } from "./storage.js";
+
+/**
+ * Parse team info from agentId
+ * agentId format: "teammate-{teamName}-{teammateName}"
+ */
+function parseTeamFromAgentId(agentId: string): { teamName: string; teammateName: string } | null {
+  if (!agentId?.startsWith("teammate-")) return null;
+
+  const parts = agentId.slice("teammate-".length).split("-");
+  if (parts.length < 2) return null;
+
+  // teamName may contain hyphens, last part is teammateName
+  const teammateName = parts.pop()!;
+  const teamName = parts.join("-");
+
+  return { teamName, teammateName };
+}
+
+/**
+ * Escape special characters for XML
+ */
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Convert message to XML format for context injection
+ */
+function messageToXml(msg: Record<string, unknown>): string {
+  const from = (msg.from as string) || "unknown";
+  const type = (msg.type as string) || "message";
+  const summary = msg.summary ? ` summary="${escapeXml(msg.summary as string)}"` : "";
+  const content = (msg.content as string) || "";
+
+  return `<teammate-message from="${from}" type="${type}"${summary}>\n${escapeXml(content)}\n</teammate-message>`;
+}
+
+/**
+ * before_prompt_build hook handler
+ * Injects pending inbox messages into teammate's context
+ */
+export async function handleBeforePromptBuild(
+  event: { prompt: string; messages: unknown[] },
+  ctx: PluginHookAgentContext,
+): Promise<PluginHookBeforePromptBuildResult> {
+  // Only process teammate sessions
+  if (!ctx.agentId?.startsWith("teammate-")) {
+    return {};
+  }
+
+  // Parse team info
+  const parsed = parseTeamFromAgentId(ctx.agentId);
+  if (!parsed || !ctx.sessionKey) {
+    return {};
+  }
+
+  const { teamName } = parsed;
+  const teamsDir = getTeamsBaseDir();
+
+  // Read pending messages
+  const messages = await readInboxMessages(teamName, teamsDir, ctx.sessionKey);
+
+  if (messages.length === 0) {
+    return {};
+  }
+
+  // Convert to XML format
+  const xmlContext = messages.map(messageToXml).join("\n");
+
+  // Clear processed messages
+  await clearInboxMessages(teamName, teamsDir, ctx.sessionKey);
+
+  // Return context to prepend
+  return {
+    prependContext: xmlContext,
+  };
+}
+```
+
+**XML Message Format in Context**:
+
+```xml
+<teammate-message from="lead" type="message" summary="Task assignment">
+  Focus on the API design first, then move to implementation.
+</teammate-message>
+
+<teammate-message from="researcher" type="task_update" summary="Status update">
+  API design complete. Ready for review.
+</teammate-message>
+```
+
+### 9. Heartbeat Wake Integration
+
+The heartbeat system wakes idle teammates when messages arrive:
+
+```typescript
+// In send_message tool
+async function sendMessage(params: SendMessageParams): Promise<SendMessageResult> {
+  // 1. Write message to inbox
+  await writeInboxMessage(teamName, teamsDir, recipient, {
+    id: generateId(),
+    from: senderSessionKey,
+    to: recipient,
+    type: "message",
+    content: params.content,
+    summary: params.summary,
+    timestamp: Date.now(),
+  });
+
+  // 2. Trigger heartbeat wake if recipient is a teammate
+  if (recipient.startsWith("agent:teammate-")) {
+    // Use OpenClaw's heartbeat wake system
+    // This is handled automatically when writing to agent: prefixed sessions
+    // The plugin SDK exposes this via runtime heartbeat APIs
+  }
+
+  return { messageId, delivered: true };
+}
+```
+
+**Heartbeat Wake Behavior**:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `coalesceMs` | 250 (default) | Delay to batch multiple messages |
+| `reason` | "teammate-message" | Identifier for wake source |
+| `sessionKey` | recipient | Target session to wake |
+
+### Plugin Hook Registration
+
+```typescript
+// index.ts
+const agentTeamPlugin = {
+  id: "agent-team",
+
+  async register(api: OpenClawPluginApi) {
+    const ctx = createPluginContext(api);
+
+    // Register tools
+    registerTeamTools(api, ctx);
+
+    // Register context injection hook
+    api.on("before_prompt_build", async (event, ctx) => {
+      return handleBeforePromptBuild(event, ctx);
+    });
+
+    api.logger.info("[agent-team] Plugin registered");
+  },
+};
+```
+
+### Message Delivery Guarantees
+
+| Guarantee | Mechanism |
+|-----------|-----------|
+| **Persistence** | JSONL files survive restarts |
+| **Ordering** | Messages read in append order |
+| **Delivery** | Heartbeat wake ensures teammate sees message |
+| **Acknowledgment** | Messages cleared after successful read |
+| **At-least-once** | No acknowledgment before clear (could re-deliver on crash) |
 
 ## Error Handling
 

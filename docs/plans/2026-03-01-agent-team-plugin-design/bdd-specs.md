@@ -227,9 +227,9 @@ Feature: Messaging
       | recipient | researcher              |
       | content   | Focus on the API design |
       | summary   | Task assignment         |
-    Then the message is appended to researcher's inbox JSONL
+    Then the message is appended to ~/.openclaw/teams/project/inbox/{sessionKey}/messages.jsonl
     And the message has a unique ID and timestamp
-    And the researcher receives a heartbeat wake notification
+    And a heartbeat wake is requested for the researcher session
 
   Scenario: Send message to non-existent teammate
     When I call send_message with recipient "unknown-teammate"
@@ -240,6 +240,7 @@ Feature: Messaging
     When I call send_message with type "broadcast"
     Then all 3 teammates receive the message
     And each teammate's inbox is updated
+    And heartbeat wake is requested for all 3 teammates
 
   Scenario: Message exceeds size limit
     When I call send_message with content larger than 100KB
@@ -255,7 +256,7 @@ Feature: Inbox
     Given my inbox has 3 unread messages
     When I call inbox
     Then I receive 3 messages in chronological order
-    And each message has: from, content, summary, timestamp
+    And each message has: id, from, content, summary, timestamp
 
   Scenario: Read and clear inbox
     Given my inbox has 2 messages
@@ -272,6 +273,73 @@ Feature: Inbox
     Given my inbox has 10 messages
     When I call inbox with limit 5
     Then I receive the 5 most recent messages
+```
+
+### Scenario: Context Injection (Heartbeat Wake Flow)
+
+```gherkin
+Feature: Message Delivery via Context Injection
+
+  Scenario: Teammate receives message via context injection
+    Given teammate "researcher" is idle in team "project"
+    And team lead sends message "Focus on API" to researcher
+    When researcher's heartbeat wake fires
+    Then the before_prompt_build hook is triggered
+    And researcher's inbox messages are read
+    And messages are converted to XML format
+    And XML is injected as prependContext in system prompt
+    And researcher sees the message in their context
+    And the inbox is cleared after injection
+
+  Scenario: Multiple messages are batched
+    Given researcher has 3 pending messages in inbox
+    When researcher's heartbeat wake fires
+    Then all 3 messages are injected in one context block
+    And the XML contains 3 teammate-message elements
+    And all 3 messages are cleared from inbox
+
+  Scenario: XML message format
+    Given a message with:
+      | from    | lead               |
+      | type    | message            |
+      | summary | Task assignment    |
+      | content | Focus on the API   |
+    When converted to XML
+    Then the output is:
+      '''
+      <teammate-message from="lead" type="message" summary="Task assignment">
+        Focus on the API
+      </teammate-message>
+      '''
+
+  Scenario: Heartbeat coalescing
+    Given team lead sends 5 messages rapidly to researcher
+    Then only 1 heartbeat wake is scheduled
+    And researcher processes all 5 messages in one wake cycle
+
+  Scenario: Teammate not in team has no context injection
+    Given agent session is not a teammate (no "teammate-" prefix)
+    When before_prompt_build hook fires
+    Then no inbox messages are read
+    And empty prependContext is returned
+```
+
+### Scenario: Message Persistence
+
+```gherkin
+Feature: Message Persistence
+
+  Scenario: Messages survive gateway restart
+    Given researcher has 2 unread messages
+    When OpenClaw gateway restarts
+    Then the messages are still in inbox JSONL file
+    And researcher can read them after restart
+
+  Scenario: Messages cleared only after successful read
+    Given researcher has 1 message in inbox
+    When researcher's context injection fails
+    Then the message is NOT cleared from inbox
+    And the message can be re-delivered on next wake
 ```
 
 ## Feature: Team Lead Skill
