@@ -1,0 +1,48 @@
+{
+  "name": "@fradser/openclaw-agent-team",
+  "version": "1.0.0",
+  "description": "Multi-agent team coordination plugin for OpenClaw with shared task ledger",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src tests"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.30"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.8",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.7"
+  },
+  "peerDependencies": {
+    "openclaw": ">=1.0.0"
+  },
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "agent",
+    "team",
+    "coordination",
+    "multi-agent"
+  ],
+  "author": "Frad LEE <fradser@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FradSer/openclaw-agent-team.git"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "id": "agent-team",
+  "name": "Agent Team",
+  "version": "1.0.0",
+  "description": "Multi-agent team coordination with shared task ledger and inter-agent messaging",
+  "main": "dist/index.js",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "maxTeammatesPerTeam": {
+        "type": "number",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 50,
+        "description": "Maximum number of teammates allowed per team"
+      },
+      "defaultAgentType": {
+        "type": "string",
+        "default": "general-purpose",
+        "description": "Default agent type for spawned teammates"
+      },
+      "teamsDir": {
+        "type": "string",
+        "description": "Directory to store team data (defaults to ~/.openclaw/teams)"
+      }
+    }
+  }
+}
