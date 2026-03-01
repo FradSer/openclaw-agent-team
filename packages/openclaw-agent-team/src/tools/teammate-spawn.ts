@@ -199,8 +199,8 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
           await ctx.api.spawnAgent({
             agentId,
             agentType: agent_type ?? "general-purpose",
-            model,
-            tools,
+            ...(model !== undefined && { model }),
+            ...(tools !== undefined && { tools }),
             workspace,
             agentDir,
           });

@@ -112,8 +112,8 @@ export function createTaskCreateTool(ctx: PluginContext): TaskCreateTool {
           task = await ledger.createTask({
             subject,
             description,
-            activeForm,
-            blockedBy,
+            ...(activeForm !== undefined && { activeForm }),
+            ...(blockedBy !== undefined && { blockedBy }),
           });
         } catch (error) {
           if (error instanceof Error && error.message.includes("Circular dependency")) {

@@ -116,10 +116,10 @@ export function createTaskListTool(ctx: PluginContext): TaskListTool {
             id: task.id,
             subject: task.subject,
             status: task.status,
-            owner: task.owner,
+            ...(task.owner !== undefined && { owner: task.owner }),
             blocked: await ledger.isTaskBlocked(task.id),
             createdAt: task.createdAt,
-            completedAt: task.completedAt,
+            ...(task.completedAt !== undefined && { completedAt: task.completedAt }),
           }))
         );
 

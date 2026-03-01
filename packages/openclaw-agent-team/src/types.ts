@@ -55,6 +55,8 @@ export const TaskStatusSchema = Type.Union([
   Type.Literal("blocked"),
 ]);
 
+export type TaskStatus = Static<typeof TaskStatusSchema>;
+
 export const TaskSchema = Type.Object({
   id: Type.String(),
   subject: Type.String({ minLength: 1 }),

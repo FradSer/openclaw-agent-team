@@ -35,8 +35,8 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
-  api: {
-    requestHeartbeatWake: (sessionKey: string) => void;
+  api?: {
+    requestHeartbeatWake?: (sessionKey: string) => void;
   };
 }
 
@@ -126,7 +126,7 @@ export function createSendMessageTool(
         });
 
         // Request heartbeat wake for the recipient
-        ctx.api.requestHeartbeatWake(recipientMember.sessionKey);
+        ctx.api?.requestHeartbeatWake?.(recipientMember.sessionKey);
 
         return {
           messageId: result.messageId,
@@ -167,7 +167,7 @@ export function createSendMessageTool(
 
         // Request heartbeat wake for all recipients
         for (const recipient of recipients) {
-          ctx.api.requestHeartbeatWake(recipient.sessionKey);
+          ctx.api?.requestHeartbeatWake?.(recipient.sessionKey);
         }
 
         return {
