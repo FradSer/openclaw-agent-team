@@ -48,6 +48,12 @@ Feature: Mailbox System
     Given researcher has 2 unread messages
     When the mailbox is closed and reopened
     Then the messages are still readable
+
+  Scenario: Messages cleared only after successful read
+    Given researcher has 1 message in inbox
+    When context injection fails during read
+    Then the message is NOT cleared from inbox
+    And the message can be re-read on next attempt
 ```
 
 ## What to Test

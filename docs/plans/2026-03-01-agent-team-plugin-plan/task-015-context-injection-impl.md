@@ -32,8 +32,9 @@ Create `src/context-injection.ts` with:
    - Parse team info from agentId
    - Read pending messages from inbox
    - Convert messages to XML format
-   - Clear inbox after reading
+   - Clear inbox ONLY after successful injection
    - Return { prependContext: xmlString }
+   - Handle errors gracefully (don't clear inbox on failure)
 
 3. **XML message format**:
    ```xml

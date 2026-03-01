@@ -46,6 +46,17 @@ Feature: Message Delivery via Context Injection
     When before_prompt_build hook fires
     Then no inbox messages are read
     And empty prependContext is returned
+
+  Scenario: Heartbeat coalescing
+    Given team lead sends 5 messages rapidly to researcher
+    Then only 1 heartbeat wake is scheduled
+    And researcher processes all 5 messages in one wake cycle
+
+  Scenario: Messages cleared only after successful injection
+    Given researcher has 1 message in inbox
+    When researcher's context injection fails
+    Then the message is NOT cleared from inbox
+    And the message can be re-delivered on next wake
 ```
 
 ## What to Test
@@ -60,7 +71,9 @@ Create `tests/context-injection.test.ts` that:
 6. Tests inbox is cleared after successful injection
 7. Tests non-teammate sessions return empty
 8. Tests XML escaping for special characters
-9. Uses mock mailbox and hook context
+9. Tests heartbeat coalescing (multiple messages processed in one wake)
+10. Tests messages are NOT cleared when injection fails
+11. Uses mock mailbox and hook context
 
 ## Verification
 
