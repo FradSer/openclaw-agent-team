@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { TSchema } from "@sinclair/typebox";
 import { AgentTeamConfigSchema } from "./types.js";
 import { createTeamCreateTool } from "./tools/team-create.js";
 import { createTeamShutdownTool } from "./tools/team-shutdown.js";
@@ -19,39 +20,49 @@ export const PLUGIN_ID = "agent-team";
 export const PLUGIN_NAME = "Agent Team";
 export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with shared task ledger";
 
-// OpenClaw Tool type
-interface OpenClawTool {
-  label: string;
-  name: string;
-  description: string;
-  schema: unknown;
-  handler: (params: unknown) => Promise<unknown>;
-}
-
-// OpenClaw Plugin API types
+// OpenClaw Plugin API types (matching clawdbot-feishu pattern)
 interface OpenClawPluginApi {
-  registerTool(tool: OpenClawTool): void;
+  registerTool(
+    tool: {
+      name: string;
+      label: string;
+      description: string;
+      parameters: TSchema;
+      execute: (toolCallId: string, params: unknown) => Promise<unknown>;
+    },
+    options: { name: string }
+  ): void;
   on(event: string, handler: (event: unknown, ctx: unknown) => Promise<unknown>): void;
   logger: {
     info: (message: string) => void;
     error: (message: string) => void;
     warn: (message: string) => void;
-    debug: (message: string) => void;
+    debug?: (message: string) => void;
   };
-  config: {
-    get(): Record<string, unknown>;
+  config?: ClawdbotConfig;
+  runtime?: {
+    log: (message: string) => void;
+    error: (message: string) => void;
   };
-  spawnAgent?(options: {
+  // Agent management APIs needed by tools
+  spawnAgent?: (config: {
     agentId: string;
     agentType: string;
     model?: string;
     tools?: { allow?: string[]; deny?: string[] };
     workspace: string;
     agentDir: string;
-  }): Promise<{ sessionKey: string }>;
-  removeAgent?(sessionKey: string): Promise<void>;
-  sendMessage?(params: { recipientSessionKey: string; type: string; content: string }): Promise<void>;
-  requestHeartbeatWake?(sessionKey: string): void;
+  }) => Promise<{ sessionKey: string }>;
+  removeAgent?: (sessionKey: string) => Promise<void>;
+  sendMessage?: (params: { recipientSessionKey: string; type: string; content: string }) => Promise<void>;
+  requestHeartbeatWake?: (sessionKey: string) => void;
+}
+
+// Minimal ClawdbotConfig type
+interface ClawdbotConfig {
+  plugins?: {
+    entries?: Record<string, { config?: Record<string, unknown> }>;
+  };
 }
 
 // Plugin context for tools
@@ -75,29 +86,17 @@ export interface SessionContext {
 }
 
 /**
- * Wraps a tool to be compatible with OpenClaw's registerTool API by using type assertion.
- */
-function toOpenClawTool(tool: {
-  label: string;
-  name: string;
-  description: string;
-  schema: unknown;
-  handler: (params: unknown) => Promise<unknown>;
-}): OpenClawTool {
-  return tool;
-}
-
-/**
  * Creates the plugin context with access to configuration and API.
  */
 function createPluginContext(api: OpenClawPluginApi): PluginContext {
-  const config = api.config.get() as {
+  // Get plugin config from api.config (direct access, not .get())
+  const pluginConfig = api.config?.plugins?.entries?.[PLUGIN_ID]?.config as {
     maxTeammatesPerTeam?: number;
     defaultAgentType?: string;
     teamsDir?: string;
-  };
+  } | undefined;
 
-  const teamsDir = config.teamsDir || join(homedir(), ".openclaw", "teams");
+  const teamsDir = pluginConfig?.teamsDir || join(homedir(), ".openclaw", "teams");
 
   // Cache for team ledgers
   const ledgerCache = new Map<string, TeamLedger>();
@@ -105,8 +104,8 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
   return {
     teamsDir,
     config: {
-      maxTeammatesPerTeam: config.maxTeammatesPerTeam ?? 10,
-      defaultAgentType: config.defaultAgentType ?? "general-purpose",
+      maxTeammatesPerTeam: pluginConfig?.maxTeammatesPerTeam ?? 10,
+      defaultAgentType: pluginConfig?.defaultAgentType ?? "general-purpose",
     },
     api,
     getTeamLedger(teamName: string): TeamLedger {
@@ -125,11 +124,42 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
 }
 
 /**
+ * Registers a tool with OpenClaw (matching clawdbot-feishu pattern)
+ */
+function registerTool<P>(
+  api: OpenClawPluginApi,
+  spec: {
+    name: string;
+    label: string;
+    description: string;
+    parameters: TSchema;
+    run: (params: P) => Promise<unknown>;
+  }
+): void {
+  api.registerTool(
+    {
+      name: spec.name,
+      label: spec.label,
+      description: spec.description,
+      parameters: spec.parameters,
+      async execute(_toolCallId: string, params: unknown) {
+        try {
+          return await spec.run(params as P);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { error: { code: "EXECUTION_ERROR", message } };
+        }
+      },
+    },
+    { name: spec.name }
+  );
+}
+
+/**
  * Registers all team management tools.
  */
 function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
   // Placeholder session context for tools that need it
-  // In a real implementation, this would be populated from the session
   const placeholderSessionCtx: SessionContext = {
     teamsDir: ctx.teamsDir,
     teamName: "",
@@ -138,80 +168,89 @@ function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
   };
 
   // Team management tools
-  api.registerTool(toOpenClawTool({
-    label: "Team Create",
+  const teamCreateTool = createTeamCreateTool(ctx);
+  registerTool(api, {
     name: "team_create",
+    label: "Team Create",
     description: "Creates a new team for multi-agent coordination",
-    schema: createTeamCreateTool(ctx).schema,
-    handler: async (params: unknown) => createTeamCreateTool(ctx).handler(params as never),
-  }));
+    parameters: teamCreateTool.schema,
+    run: (params) => teamCreateTool.handler(params as never),
+  });
 
-  api.registerTool(toOpenClawTool({
-    label: "Team Shutdown",
+  const teamShutdownTool = createTeamShutdownTool(ctx);
+  registerTool(api, {
     name: "team_shutdown",
+    label: "Team Shutdown",
     description: "Gracefully shuts down a team and notifies all teammates",
-    schema: createTeamShutdownTool(ctx).schema,
-    handler: async (params: unknown) => createTeamShutdownTool(ctx).handler(params as never),
-  }));
+    parameters: teamShutdownTool.schema,
+    run: (params) => teamShutdownTool.handler(params as never),
+  });
 
   // Teammate management tools
-  api.registerTool(toOpenClawTool({
-    label: "Teammate Spawn",
+  const teammateSpawnTool = createTeammateSpawnTool(ctx);
+  registerTool(api, {
     name: "teammate_spawn",
+    label: "Teammate Spawn",
     description: "Spawns a new teammate agent within an existing team",
-    schema: createTeammateSpawnTool(ctx).schema,
-    handler: async (params: unknown) => createTeammateSpawnTool(ctx).handler(params as never),
-  }));
+    parameters: teammateSpawnTool.schema,
+    run: (params) => teammateSpawnTool.handler(params as never),
+  });
 
   // Task management tools
-  api.registerTool(toOpenClawTool({
-    label: "Task Create",
+  const taskCreateTool = createTaskCreateTool(ctx);
+  registerTool(api, {
     name: "task_create",
+    label: "Task Create",
     description: "Creates a new task within a team with optional dependencies",
-    schema: createTaskCreateTool(ctx).schema,
-    handler: async (params: unknown) => createTaskCreateTool(ctx).handler(params as never),
-  }));
+    parameters: taskCreateTool.schema,
+    run: (params) => taskCreateTool.handler(params as never),
+  });
 
-  api.registerTool(toOpenClawTool({
-    label: "Task List",
+  const taskListTool = createTaskListTool(ctx);
+  registerTool(api, {
     name: "task_list",
+    label: "Task List",
     description: "Lists tasks for a team with optional filtering",
-    schema: createTaskListTool(ctx).schema,
-    handler: async (params: unknown) => createTaskListTool(ctx).handler(params as never),
-  }));
+    parameters: taskListTool.schema,
+    run: (params) => taskListTool.handler(params as never),
+  });
 
-  api.registerTool(toOpenClawTool({
-    label: "Task Claim",
+  const taskClaimTool = createTaskClaimTool(ctx, placeholderSessionCtx);
+  registerTool(api, {
     name: "task_claim",
+    label: "Task Claim",
     description: "Claims an available task for the current agent session",
-    schema: createTaskClaimTool(ctx, placeholderSessionCtx).schema,
-    handler: async (params: unknown) => createTaskClaimTool(ctx, placeholderSessionCtx).handler(params as never),
-  }));
+    parameters: taskClaimTool.schema,
+    run: (params) => taskClaimTool.handler(params as never),
+  });
 
-  api.registerTool(toOpenClawTool({
-    label: "Task Complete",
+  const taskCompleteTool = createTaskCompleteTool(ctx, placeholderSessionCtx);
+  registerTool(api, {
     name: "task_complete",
+    label: "Task Complete",
     description: "Marks a claimed task as completed",
-    schema: createTaskCompleteTool(ctx, placeholderSessionCtx).schema,
-    handler: async (params: unknown) => createTaskCompleteTool(ctx, placeholderSessionCtx).handler(params as never),
-  }));
+    parameters: taskCompleteTool.schema,
+    run: (params) => taskCompleteTool.handler(params as never),
+  });
 
   // Messaging tools
-  api.registerTool(toOpenClawTool({
-    label: "Send Message",
+  const sendMessageTool = createSendMessageTool(ctx, "", "", ctx.getTeamLedger(""));
+  registerTool(api, {
     name: "send_message",
+    label: "Send Message",
     description: "Send a direct message to a teammate or broadcast to all teammates",
-    schema: createSendMessageTool(ctx, "", "", ctx.getTeamLedger("")).schema,
-    handler: async () => ({ error: { code: "NOT_CONFIGURED", message: "Tool not configured for this session" } }),
-  }));
+    parameters: sendMessageTool.schema,
+    run: async () => ({ error: { code: "NOT_CONFIGURED", message: "Tool not configured for this session" } }),
+  });
 
-  api.registerTool(toOpenClawTool({
-    label: "Inbox",
+  const inboxTool = createInboxTool(placeholderSessionCtx);
+  registerTool(api, {
     name: "inbox",
+    label: "Inbox",
     description: "Read messages from your inbox",
-    schema: createInboxTool(placeholderSessionCtx).schema,
-    handler: async (params: unknown) => createInboxTool(placeholderSessionCtx).handler(params as never),
-  }));
+    parameters: inboxTool.schema,
+    run: (params) => inboxTool.handler(params as never),
+  });
 }
 
 /**
@@ -256,14 +295,15 @@ export { TeamLedger } from "./ledger.js";
 export { teamDirectoryExists, readTeamConfig, writeTeamConfig } from "./storage.js";
 export { createContextInjectionHook } from "./context-injection.js";
 
-// Plugin definition
+// Plugin definition (matching clawdbot-feishu pattern)
 const agentTeamPlugin = {
   id: PLUGIN_ID,
   name: PLUGIN_NAME,
   description: PLUGIN_DESCRIPTION,
   configSchema: AgentTeamConfigSchema,
 
-  async register(api: OpenClawPluginApi): Promise<void> {
+  // Note: register must NOT be async
+  register(api: OpenClawPluginApi) {
     const ctx = createPluginContext(api);
 
     // Register all tools

@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp openclaw.plugin.json dist/",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src tests"
@@ -44,5 +44,8 @@
   },
   "engines": {
     "node": ">=20.0.0"
+  },
+  "openclaw": {
+    "extensions": ["./index.ts"]
   }
 }
