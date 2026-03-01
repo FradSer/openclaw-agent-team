@@ -3,6 +3,14 @@ import { readFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import plugin from "../src/index.js";
 
+// Mock PluginRuntime
+interface MockPluginRuntime {
+  config: {
+    loadConfig: ReturnType<typeof vi.fn>;
+    writeConfigFile: ReturnType<typeof vi.fn>;
+  };
+}
+
 // Mock OpenClaw Plugin API (matching clawdbot-feishu pattern)
 interface MockOpenClawPluginApi {
   registerTool: ReturnType<typeof vi.fn>;
@@ -13,24 +21,40 @@ interface MockOpenClawPluginApi {
     warn: ReturnType<typeof vi.fn>;
     debug?: ReturnType<typeof vi.fn>;
   };
-  config?: {
-    plugins?: {
-      entries?: Record<string, { config?: Record<string, unknown> }>;
-    };
+  pluginConfig?: {
+    maxTeammatesPerTeam?: number;
+    defaultAgentType?: string;
+    teamsDir?: string;
   };
-  spawnAgent?: ReturnType<typeof vi.fn>;
-  removeAgent?: ReturnType<typeof vi.fn>;
-  sendMessage?: ReturnType<typeof vi.fn>;
-  requestHeartbeatWake?: ReturnType<typeof vi.fn>;
+  runtime: MockPluginRuntime;
+}
+
+// Mock PluginRuntime type
+interface MockPluginRuntime {
+  config: {
+    loadConfig: ReturnType<typeof vi.fn>;
+    writeConfigFile: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe("Plugin Entry Point", () => {
   let mockApi: MockOpenClawPluginApi;
   let tempDir: string;
+  let mockRuntime: MockPluginRuntime;
 
   beforeEach(async () => {
     tempDir = join(process.cwd(), "test-temp", `plugin-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
+
+    mockRuntime = {
+      config: {
+        loadConfig: vi.fn().mockResolvedValue({
+          agents: { list: [] },
+          bindings: [],
+        }),
+        writeConfigFile: vi.fn().mockResolvedValue(undefined),
+      },
+    };
 
     mockApi = {
       registerTool: vi.fn(),
@@ -41,23 +65,12 @@ describe("Plugin Entry Point", () => {
         warn: vi.fn(),
         debug: vi.fn(),
       },
-      config: {
-        plugins: {
-          entries: {
-            "agent-team": {
-              config: {
-                maxTeammatesPerTeam: 10,
-                defaultAgentType: "general-purpose",
-                teamsDir: tempDir,
-              },
-            },
-          },
-        },
+      pluginConfig: {
+        maxTeammatesPerTeam: 10,
+        defaultAgentType: "general-purpose",
+        teamsDir: tempDir,
       },
-      spawnAgent: vi.fn(),
-      removeAgent: vi.fn(),
-      sendMessage: vi.fn(),
-      requestHeartbeatWake: vi.fn(),
+      runtime: mockRuntime as unknown as MockOpenClawPluginApi["runtime"],
     };
   });
 

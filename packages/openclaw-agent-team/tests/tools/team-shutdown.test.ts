@@ -1,11 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, rm, stat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTeamShutdownTool } from "../../src/tools/team-shutdown.js";
 import { createTeamCreateTool } from "../../src/tools/team-create.js";
 import { createTeammateSpawnTool } from "../../src/tools/teammate-spawn.js";
 import { TeamLedger } from "../../src/ledger.js";
+import { setAgentTeamRuntime, resetAgentTeamRuntime } from "../../src/runtime.js";
 import type { TeamConfig, TeammateDefinition } from "../../src/types.js";
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 // Type definitions based on the expected API
 interface TeamShutdownResponse {
@@ -25,52 +27,46 @@ interface ToolError {
 
 interface PluginContext {
   teamsDir: string;
-  api: {
-    spawnAgent?: (config: {
-      agentId: string;
-      agentType: string;
-      model?: string;
-      tools?: { allow?: string[]; deny?: string[] };
-      workspace: string;
-      agentDir: string;
-    }) => Promise<{ sessionKey: string }>;
-    sendMessage?: (params: {
-      recipientSessionKey: string;
-      type: string;
-      content: string;
-    }) => Promise<void>;
-    removeAgent?: (sessionKey: string) => Promise<void>;
-  };
 }
 
 describe("team_shutdown tool", () => {
   let tempDir: string;
   let ctx: PluginContext;
-  let sentMessages: Array<{ recipientSessionKey: string; type: string; content: string }>;
-  let removedAgents: string[];
+  let mockConfig: {
+    agents: { list: Array<{ id: string; workspace: string; agentDir: string }> };
+    bindings: Array<{ agentId: string; match: unknown }>;
+  };
 
   beforeEach(async () => {
     tempDir = join(process.cwd(), "test-temp", `team-shutdown-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
-    sentMessages = [];
-    removedAgents = [];
+
+    // Initialize mock config that tracks agents
+    mockConfig = {
+      agents: { list: [] },
+      bindings: [],
+    };
+
+    // Initialize mock runtime
+    const mockRuntime = {
+      config: {
+        loadConfig: vi.fn().mockImplementation(() => Promise.resolve(mockConfig)),
+        writeConfigFile: vi.fn().mockImplementation((cfg) => {
+          mockConfig.agents = cfg.agents;
+          mockConfig.bindings = cfg.bindings;
+          return Promise.resolve();
+        }),
+      },
+    };
+    setAgentTeamRuntime(mockRuntime as unknown as PluginRuntime);
+
     ctx = {
       teamsDir: tempDir,
-      api: {
-        spawnAgent: async (config) => ({
-          sessionKey: `session-${config.agentId}-${Date.now()}`,
-        }),
-        sendMessage: async (params) => {
-          sentMessages.push(params);
-        },
-        removeAgent: async (sessionKey: string) => {
-          removedAgents.push(sessionKey);
-        },
-      },
     };
   });
 
   afterEach(async () => {
+    resetAgentTeamRuntime();
     await rm(join(process.cwd(), "test-temp"), { recursive: true, force: true });
   });
 
@@ -140,16 +136,14 @@ describe("team_shutdown tool", () => {
 
         expect(result.teammatesNotified).toBe(3);
 
-        // Verify all teammates received shutdown_request message
-        expect(sentMessages.length).toBe(3);
-        for (const msg of sentMessages) {
-          expect(msg.type).toBe("shutdown_request");
-        }
+        // Verify all teammates have shutdown status in ledger
+        const ledger = new TeamLedger(join(tempDir, "shutdown-message-team", "ledger.db"));
+        const members = await ledger.listMembers();
+        ledger.close();
 
-        // Verify each session key received a message
-        const notifiedSessionKeys = sentMessages.map((m) => m.recipientSessionKey);
-        for (const key of sessionKeys) {
-          expect(notifiedSessionKeys).toContain(key);
+        expect(members.length).toBe(3);
+        for (const member of members) {
+          expect(member.status).toBe("shutdown");
         }
       });
 
@@ -160,8 +154,9 @@ describe("team_shutdown tool", () => {
           team_name: "shutdown-remove-team",
         });
 
-        // Verify agents were removed via API
-        expect(removedAgents.length).toBe(2);
+        // Verify agents were removed from config
+        expect(mockConfig.agents.list.length).toBe(0);
+        expect(mockConfig.bindings.length).toBe(0);
       });
 
       it("Then should update all teammate statuses to 'shutdown' in ledger", async () => {
@@ -239,25 +234,23 @@ describe("team_shutdown tool", () => {
 
         expect(result.status).toBe("shutdown");
         expect(result.teammatesNotified).toBe(0);
-        expect(sentMessages.length).toBe(0);
       });
     });
   });
 
   describe("Given a shutdown request with optional reason", () => {
     describe("When shutting down with a reason", () => {
-      it("Then should include reason in shutdown_request messages", async () => {
+      it("Then should accept the reason parameter", async () => {
         await createTeamWithTeammates("reason-shutdown-team", 2);
         const tool = createTeamShutdownTool(ctx);
-        await tool.handler({
+        const result = await tool.handler({
           team_name: "reason-shutdown-team",
           reason: "Project completed successfully",
         });
 
-        // Verify reason is included in messages
-        for (const msg of sentMessages) {
-          expect(msg.content).toContain("Project completed successfully");
-        }
+        // Verify shutdown succeeded
+        expect((result as TeamShutdownResponse).status).toBe("shutdown");
+        expect((result as TeamShutdownResponse).teammatesNotified).toBe(2);
       });
     });
   });

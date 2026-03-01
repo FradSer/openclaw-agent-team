@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { Mailbox } from "./mailbox.js";
 import type { TeamMessage } from "./types.js";
+import { parseTeammateAgentId } from "./types.js";
 
 export interface ContextInjectionContext {
   sessionKey: string;
@@ -38,8 +39,9 @@ function messageToXml(message: TeamMessage): string {
 }
 
 function isTeammateSession(ctx: ContextInjectionContext): boolean {
-  // Check if sessionKey has "teammate-" prefix
-  if (ctx.sessionKey.includes("teammate-")) {
+  // Check if sessionKey contains teammate agent ID pattern
+  const parsed = parseTeammateAgentId(ctx.sessionKey);
+  if (parsed) {
     return true;
   }
 

@@ -8,7 +8,9 @@ import {
   resolveTeammatePaths,
 } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
+import { getAgentTeamRuntime } from "../runtime.js";
 import type { TeammateDefinition, TeammateToolsSchema } from "../types.js";
+import { buildTeammateAgentId, AGENT_TEAM_CHANNEL } from "../types.js";
 
 // Schema for teammate spawn parameters
 export const TeammateSpawnSchema = Type.Object({
@@ -44,16 +46,6 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
-  api?: {
-    spawnAgent?: (config: {
-      agentId: string;
-      agentType: string;
-      model?: string;
-      tools?: { allow?: string[]; deny?: string[] };
-      workspace: string;
-      agentDir: string;
-    }) => Promise<{ sessionKey: string }>;
-  };
 }
 
 // Tool type for testing compatibility
@@ -130,8 +122,8 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
         };
       }
 
-      // Generate agent ID
-      const agentId = `teammate-${team_name}-${name}`;
+      // Generate agent ID using helper
+      const agentId = buildTeammateAgentId(team_name, name);
 
       // Resolve paths for teammate
       const { workspace, agentDir } = resolveTeammatePaths(ctx.teamsDir, team_name, name);
@@ -170,7 +162,7 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
         await mkdir(agentDir, { recursive: true, mode: 0o700 });
 
         // Generate session key
-        const sessionKey = `agent:teammate-${team_name}-${name}:main`;
+        const sessionKey = `agent:${agentId}:main`;
 
         // Create teammate definition
         const now = Date.now();
@@ -194,17 +186,29 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
         // Add teammate to ledger
         await ledger.addMember(teammate);
 
-        // Call spawnAgent API if available
-        if (ctx.api?.spawnAgent) {
-          await ctx.api.spawnAgent({
-            agentId,
-            agentType: agent_type ?? "general-purpose",
-            ...(model !== undefined && { model }),
-            ...(tools !== undefined && { tools }),
-            workspace,
-            agentDir,
-          });
-        }
+        // Register agent via runtime config
+        const runtime = getAgentTeamRuntime();
+        const cfg = await runtime.config.loadConfig();
+
+        const updatedCfg = {
+          ...cfg,
+          agents: {
+            ...cfg.agents,
+            list: [...(cfg.agents?.list ?? []), { id: agentId, workspace, agentDir }],
+          },
+          bindings: [
+            ...(cfg.bindings ?? []),
+            {
+              agentId,
+              match: {
+                channel: AGENT_TEAM_CHANNEL,
+                peer: { kind: "direct" as const, id: `${team_name}:${name}` },
+              },
+            },
+          ],
+        };
+
+        await runtime.config.writeConfigFile(updatedCfg);
 
         return {
           agentId,

@@ -1,10 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdir, rm, stat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createTeammateSpawnTool } from "../../src/tools/teammate-spawn.js";
 import { createTeamCreateTool } from "../../src/tools/team-create.js";
 import { TeamLedger } from "../../src/ledger.js";
+import { setAgentTeamRuntime, resetAgentTeamRuntime } from "../../src/runtime.js";
 import type { TeamConfig, TeammateDefinition } from "../../src/types.js";
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 
 // Type definitions based on the expected API
 interface TeammateSpawnResponse {
@@ -23,16 +25,6 @@ interface ToolError {
 
 interface PluginContext {
   teamsDir: string;
-  api: {
-    spawnAgent?: (config: {
-      agentId: string;
-      agentType: string;
-      model?: string;
-      tools?: { allow?: string[]; deny?: string[] };
-      workspace: string;
-      agentDir: string;
-    }) => Promise<{ sessionKey: string }>;
-  };
 }
 
 describe("teammate_spawn tool", () => {
@@ -44,15 +36,23 @@ describe("teammate_spawn tool", () => {
     await mkdir(tempDir, { recursive: true });
     ctx = {
       teamsDir: tempDir,
-      api: {
-        spawnAgent: async (config) => ({
-          sessionKey: `session-${config.agentId}-${Date.now()}`,
+    };
+
+    // Initialize mock runtime
+    const mockRuntime = {
+      config: {
+        loadConfig: vi.fn().mockResolvedValue({
+          agents: { list: [] },
+          bindings: [],
         }),
+        writeConfigFile: vi.fn().mockResolvedValue(undefined),
       },
     };
+    setAgentTeamRuntime(mockRuntime as unknown as PluginRuntime);
   });
 
   afterEach(async () => {
+    resetAgentTeamRuntime();
     await rm(join(process.cwd(), "test-temp"), { recursive: true, force: true });
   });
 

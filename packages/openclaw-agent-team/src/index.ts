@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
+import type { PluginRuntime } from "openclaw/plugin-sdk";
 import { AgentTeamConfigSchema } from "./types.js";
 import { createTeamCreateTool } from "./tools/team-create.js";
 import { createTeamShutdownTool } from "./tools/team-shutdown.js";
@@ -14,6 +15,7 @@ import { createInboxTool } from "./tools/inbox.js";
 import { createContextInjectionHook } from "./context-injection.js";
 import { TeamLedger } from "./ledger.js";
 import { teamDirectoryExists } from "./storage.js";
+import { setAgentTeamRuntime } from "./runtime.js";
 
 // Plugin constants
 export const PLUGIN_ID = "agent-team";
@@ -39,30 +41,12 @@ interface OpenClawPluginApi {
     warn: (message: string) => void;
     debug?: (message: string) => void;
   };
-  config?: ClawdbotConfig;
-  runtime?: {
-    log: (message: string) => void;
-    error: (message: string) => void;
+  pluginConfig?: {
+    maxTeammatesPerTeam?: number;
+    defaultAgentType?: string;
+    teamsDir?: string;
   };
-  // Agent management APIs needed by tools
-  spawnAgent?: (config: {
-    agentId: string;
-    agentType: string;
-    model?: string;
-    tools?: { allow?: string[]; deny?: string[] };
-    workspace: string;
-    agentDir: string;
-  }) => Promise<{ sessionKey: string }>;
-  removeAgent?: (sessionKey: string) => Promise<void>;
-  sendMessage?: (params: { recipientSessionKey: string; type: string; content: string }) => Promise<void>;
-  requestHeartbeatWake?: (sessionKey: string) => void;
-}
-
-// Minimal ClawdbotConfig type
-interface ClawdbotConfig {
-  plugins?: {
-    entries?: Record<string, { config?: Record<string, unknown> }>;
-  };
+  runtime: PluginRuntime;
 }
 
 // Plugin context for tools
@@ -72,7 +56,6 @@ export interface PluginContext {
     maxTeammatesPerTeam: number;
     defaultAgentType: string;
   };
-  api: OpenClawPluginApi;
   getTeamLedger(teamName: string): TeamLedger;
   teamExists(teamName: string): Promise<boolean>;
 }
@@ -89,12 +72,8 @@ export interface SessionContext {
  * Creates the plugin context with access to configuration and API.
  */
 function createPluginContext(api: OpenClawPluginApi): PluginContext {
-  // Get plugin config from api.config (direct access, not .get())
-  const pluginConfig = api.config?.plugins?.entries?.[PLUGIN_ID]?.config as {
-    maxTeammatesPerTeam?: number;
-    defaultAgentType?: string;
-    teamsDir?: string;
-  } | undefined;
+  // Get plugin config from api.pluginConfig
+  const pluginConfig = api.pluginConfig;
 
   const teamsDir = pluginConfig?.teamsDir || join(homedir(), ".openclaw", "teams");
 
@@ -107,7 +86,6 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
       maxTeammatesPerTeam: pluginConfig?.maxTeammatesPerTeam ?? 10,
       defaultAgentType: pluginConfig?.defaultAgentType ?? "general-purpose",
     },
-    api,
     getTeamLedger(teamName: string): TeamLedger {
       let ledger = ledgerCache.get(teamName);
       if (!ledger) {
@@ -304,6 +282,9 @@ const agentTeamPlugin = {
 
   // Note: register must NOT be async
   register(api: OpenClawPluginApi) {
+    // Initialize runtime singleton for use by tools
+    setAgentTeamRuntime(api.runtime);
+
     const ctx = createPluginContext(api);
 
     // Register all tools

@@ -1,6 +1,44 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
+// Agent ID constants and helpers
+export const TEAMMATE_AGENT_ID_PREFIX = "teammate-";
+export const AGENT_TEAM_CHANNEL = "agent-team";
+
+/**
+ * Builds a teammate agent ID from team name and teammate name.
+ * Format: teammate-{teamName}-{teammateName}
+ */
+export function buildTeammateAgentId(teamName: string, teammateName: string): string {
+  return `${TEAMMATE_AGENT_ID_PREFIX}${teamName}-${teammateName}`;
+}
+
+/**
+ * Parses a teammate agent ID to extract team name and teammate name.
+ * Returns null if the ID is not a valid teammate agent ID.
+ */
+export function parseTeammateAgentId(agentId: string): { teamName: string; teammateName: string } | null {
+  if (!agentId.startsWith(TEAMMATE_AGENT_ID_PREFIX)) {
+    return null;
+  }
+
+  const suffix = agentId.slice(TEAMMATE_AGENT_ID_PREFIX.length);
+  const firstHyphenIndex = suffix.indexOf("-");
+
+  if (firstHyphenIndex === -1) {
+    return null;
+  }
+
+  const teamName = suffix.slice(0, firstHyphenIndex);
+  const teammateName = suffix.slice(firstHyphenIndex + 1);
+
+  if (!teamName || !teammateName) {
+    return null;
+  }
+
+  return { teamName, teammateName };
+}
+
 // Team Configuration
 
 export const TeamConfigSchema = Type.Object({

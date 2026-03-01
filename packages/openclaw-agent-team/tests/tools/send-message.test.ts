@@ -20,28 +20,18 @@ interface ToolError {
 
 interface PluginContext {
   teamsDir: string;
-  api: {
-    requestHeartbeatWake: (sessionKey: string) => void;
-  };
 }
 
 describe("send_message tool", () => {
   let tempDir: string;
   let ctx: PluginContext;
   let ledger: TeamLedger;
-  let heartbeatRequests: string[];
 
   beforeEach(async () => {
     tempDir = join(process.cwd(), "test-temp", `send-message-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
-    heartbeatRequests = [];
     ctx = {
       teamsDir: tempDir,
-      api: {
-        requestHeartbeatWake: (sessionKey: string) => {
-          heartbeatRequests.push(sessionKey);
-        },
-      },
     };
   });
 
@@ -121,16 +111,25 @@ describe("send_message tool", () => {
         expect(message.timestamp).toBeDefined();
       });
 
-      it("Then should request heartbeat wake for recipient", async () => {
+      it("Then should store message with correct metadata", async () => {
         const tool = createSendMessageTool(ctx, "test-team", "lead", ledger);
-        await tool.handler({
+        const result = (await tool.handler({
           type: "message",
           recipient: "researcher",
           content: "Hello",
           summary: "Greeting",
-        });
+        })) as SendMessageResponse;
 
-        expect(heartbeatRequests).toContain("agent:teammate-test-team-researcher:main");
+        expect(result.delivered).toBe(true);
+
+        // Verify message was stored with correct metadata
+        const inboxPath = join(tempDir, "test-team", "inbox", "researcher", "messages.jsonl");
+        const content = await readFile(inboxPath, "utf-8");
+        const message = JSON.parse(content.trim());
+
+        expect(message.id).toBeDefined();
+        expect(message.timestamp).toBeGreaterThan(0);
+        expect(message.type).toBe("message");
       });
     });
 
@@ -177,7 +176,7 @@ describe("send_message tool", () => {
         expect(JSON.parse(coderInbox).content).toBe("Team announcement");
       });
 
-      it("Then should request heartbeat wake for all recipients", async () => {
+      it("Then should deliver broadcast to all inbox files", async () => {
         const tool = createSendMessageTool(ctx, "test-team", "lead", ledger);
         await tool.handler({
           type: "broadcast",
@@ -185,7 +184,23 @@ describe("send_message tool", () => {
           summary: "Important update",
         });
 
-        expect(heartbeatRequests).toHaveLength(3);
+        // Verify each inbox received the broadcast message
+        const researcherInbox = await readFile(
+          join(tempDir, "test-team", "inbox", "researcher", "messages.jsonl"),
+          "utf-8"
+        );
+        const coderInbox = await readFile(
+          join(tempDir, "test-team", "inbox", "coder", "messages.jsonl"),
+          "utf-8"
+        );
+        const reviewerInbox = await readFile(
+          join(tempDir, "test-team", "inbox", "reviewer", "messages.jsonl"),
+          "utf-8"
+        );
+
+        expect(JSON.parse(researcherInbox).type).toBe("broadcast");
+        expect(JSON.parse(coderInbox).type).toBe("broadcast");
+        expect(JSON.parse(reviewerInbox).type).toBe("broadcast");
       });
     });
 

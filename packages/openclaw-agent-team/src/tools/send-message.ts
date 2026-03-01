@@ -35,9 +35,6 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
-  api?: {
-    requestHeartbeatWake?: (sessionKey: string) => void;
-  };
 }
 
 // Tool type for testing compatibility
@@ -125,9 +122,6 @@ export function createSendMessageTool(
           summary,
         });
 
-        // Request heartbeat wake for the recipient
-        ctx.api?.requestHeartbeatWake?.(recipientMember.sessionKey);
-
         return {
           messageId: result.messageId,
           recipient,
@@ -164,11 +158,6 @@ export function createSendMessageTool(
           content,
           summary,
         });
-
-        // Request heartbeat wake for all recipients
-        for (const recipient of recipients) {
-          ctx.api?.requestHeartbeatWake?.(recipient.sessionKey);
-        }
 
         return {
           messageId: result.messageId,

@@ -2,6 +2,7 @@ import { Type, type Static } from "@sinclair/typebox";
 import { join } from "node:path";
 import { teamDirectoryExists, readTeamConfig, writeTeamConfig } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
+import { getAgentTeamRuntime } from "../runtime.js";
 
 // Schema for team shutdown parameters
 export const TeamShutdownSchema = Type.Object({
@@ -30,14 +31,6 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
-  api?: {
-    sendMessage?: (params: {
-      recipientSessionKey: string;
-      type: string;
-      content: string;
-    }) => Promise<void>;
-    removeAgent?: (sessionKey: string) => Promise<void>;
-  };
 }
 
 // Tool type for testing compatibility
@@ -59,7 +52,7 @@ export function createTeamShutdownTool(ctx: PluginContext): TeamShutdownTool {
     description: "Gracefully shuts down a team and notifies all teammates",
     schema: TeamShutdownSchema,
     handler: async (params: TeamShutdownParams): Promise<TeamShutdownResponse | ToolError> => {
-      const { team_name, reason } = params;
+      const { team_name } = params;
 
       // Check if team exists
       const exists = await teamDirectoryExists(ctx.teamsDir, team_name);
@@ -101,30 +94,28 @@ export function createTeamShutdownTool(ctx: PluginContext): TeamShutdownTool {
         const members = await ledger.listMembers();
         const shutdownAt = Date.now();
 
-        // Send shutdown_request messages to all teammates and remove agents
+        // Collect agent IDs to remove
+        const teammateAgentIds = new Set(members.map((m) => m.agentId));
+
+        // Remove agents via runtime config
+        const runtime = getAgentTeamRuntime();
+        const cfg = await runtime.config.loadConfig();
+
+        const updatedCfg = {
+          ...cfg,
+          agents: {
+            ...cfg.agents,
+            list: (cfg.agents?.list ?? []).filter((a) => !teammateAgentIds.has(a.id)),
+          },
+          bindings: (cfg.bindings ?? []).filter((b) => !teammateAgentIds.has(b.agentId)),
+        };
+
+        await runtime.config.writeConfigFile(updatedCfg);
+
+        // Update member status to shutdown in ledger
         let teammatesNotified = 0;
         for (const member of members) {
-          // Send shutdown_request message via API if available
-          if (ctx.api?.sendMessage) {
-            const content = reason
-              ? `Team shutdown: ${reason}`
-              : "Team shutdown";
-
-            await ctx.api.sendMessage({
-              recipientSessionKey: member.sessionKey,
-              type: "shutdown_request",
-              content,
-            });
-          }
-
-          // Remove agent via API if available
-          if (ctx.api?.removeAgent) {
-            await ctx.api.removeAgent(member.sessionKey);
-          }
-
-          // Update member status to shutdown in ledger
           await ledger.updateMemberStatus(member.sessionKey, "shutdown");
-
           teammatesNotified++;
         }
 
