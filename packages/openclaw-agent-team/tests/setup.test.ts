@@ -3,7 +3,7 @@ import { PLUGIN_ID, PLUGIN_NAME } from "../src/index.js";
 
 describe("Package Setup", () => {
   it("should export PLUGIN_ID", () => {
-    expect(PLUGIN_ID).toBe("agent-team");
+    expect(PLUGIN_ID).toBe("openclaw-agent-team");
   });
 
   it("should export PLUGIN_NAME", () => {

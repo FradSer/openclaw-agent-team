@@ -136,6 +136,32 @@ export function resolveTeammatePaths(
 }
 
 /**
+ * Resolves the session store path for a teammate.
+ * Returns {teamsDir}/{teamName}/agents/{teammateName}/sessions/sessions.json
+ */
+export function resolveTeammateSessionStorePath(
+  teamsDir: string,
+  teamName: string,
+  teammateName: string
+): string {
+  const sanitized = sanitizeTeammateName(teammateName);
+  return resolveTeamPath(teamsDir, teamName, "agents", sanitized, "sessions", "sessions.json");
+}
+
+/**
+ * Resolves the sessions directory for a teammate.
+ * Returns {teamsDir}/{teamName}/agents/{teammateName}/sessions/
+ */
+export function resolveTeammateSessionsDir(
+  teamsDir: string,
+  teamName: string,
+  teammateName: string
+): string {
+  const sanitized = sanitizeTeammateName(teammateName);
+  return resolveTeamPath(teamsDir, teamName, "agents", sanitized, "sessions");
+}
+
+/**
  * Resolves a path within a team directory with path traversal protection.
  * Throws an error if the resolved path would escape the teams directory.
  */

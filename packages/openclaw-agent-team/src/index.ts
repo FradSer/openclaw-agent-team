@@ -2,7 +2,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { TSchema } from "@sinclair/typebox";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
-import { AgentTeamConfigSchema } from "./types.js";
+import { AgentTeamConfigSchema, parseTeammateAgentId } from "./types.js";
 import { createTeamCreateTool } from "./tools/team-create.js";
 import { createTeamShutdownTool } from "./tools/team-shutdown.js";
 import { createTeammateSpawnTool } from "./tools/teammate-spawn.js";
@@ -16,6 +16,7 @@ import { createContextInjectionHook } from "./context-injection.js";
 import { TeamLedger } from "./ledger.js";
 import { teamDirectoryExists } from "./storage.js";
 import { setAgentTeamRuntime } from "./runtime.js";
+import { agentTeamChannelPlugin } from "./channel.js";
 
 // Plugin constants
 export const PLUGIN_ID = "openclaw-agent-team";
@@ -34,6 +35,7 @@ interface OpenClawPluginApi {
     },
     options: { name: string }
   ): void;
+  registerChannel(params: { plugin: unknown }): void;
   on(event: string, handler: (event: unknown, ctx: unknown) => Promise<unknown>): void;
   logger: {
     info: (message: string) => void;
@@ -233,6 +235,9 @@ function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
 
 /**
  * Gets session context from the current session.
+ * Attempts to extract team/teammate info from:
+ * 1. Direct event properties (teamName, teammateName)
+ * 2. Parsing sessionKey (format: agent:teammate-{team}-{name}:main)
  */
 function getSessionContext(event: unknown): SessionContext | null {
   const sessionEvent = event as {
@@ -240,16 +245,39 @@ function getSessionContext(event: unknown): SessionContext | null {
     teamName?: string;
     teammateName?: string;
     teamsDir?: string;
+    agentId?: string;
   };
 
-  if (!sessionEvent.sessionKey || !sessionEvent.teamName || !sessionEvent.teammateName) {
+  if (!sessionEvent.sessionKey) {
+    return null;
+  }
+
+  // Try to get team/teammate from direct properties first
+  let teamName = sessionEvent.teamName;
+  let teammateName = sessionEvent.teammateName;
+
+  // If not provided directly, try to parse from sessionKey or agentId
+  if (!teamName || !teammateName) {
+    // sessionKey format: agent:teammate-{teamName}-{teammateName}:main
+    // or agentId format: teammate-{teamName}-{teammateName}
+    const agentId = sessionEvent.agentId || sessionEvent.sessionKey.split(":")[1];
+    if (agentId) {
+      const parsed = parseTeammateAgentId(agentId);
+      if (parsed) {
+        teamName = teamName || parsed.teamName;
+        teammateName = teammateName || parsed.teammateName;
+      }
+    }
+  }
+
+  if (!teamName || !teammateName) {
     return null;
   }
 
   return {
     teamsDir: sessionEvent.teamsDir || join(homedir(), ".openclaw", "teams"),
-    teamName: sessionEvent.teamName,
-    teammateName: sessionEvent.teammateName,
+    teamName,
+    teammateName,
     sessionKey: sessionEvent.sessionKey,
   };
 }
@@ -288,6 +316,9 @@ const agentTeamPlugin = {
     const ctx = createPluginContext(api);
 
     api.logger.info(`[agent-team] Plugin config: teamsDir=${ctx.teamsDir}, pluginConfig.teamsDir=${api.pluginConfig?.teamsDir || "not set"}`);
+
+    // Register channel plugin (KEY CHANGE for teammate invocation)
+    api.registerChannel({ plugin: agentTeamChannelPlugin });
 
     // Register all tools
     registerTeamTools(api, ctx);

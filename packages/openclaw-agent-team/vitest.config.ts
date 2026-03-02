@@ -15,5 +15,16 @@ export default defineConfig({
     },
     testTimeout: 10000,
     hookTimeout: 10000,
+    // Handle internal OpenClaw module imports that aren't in the exports map
+    deps: {
+      interopDefault: true,
+    },
+    // Mock the internal heartbeat module path
+    alias: [
+      {
+        find: /^openclaw\/dist\/plugin-sdk\/infra\/heartbeat-wake\.js$/,
+        replacement: "/Users/FradSer/Developer/FradSer/openclaw-agent-team/packages/openclaw-agent-team/tests/__mocks__/heartbeat-wake.ts",
+      },
+    ],
   },
 });

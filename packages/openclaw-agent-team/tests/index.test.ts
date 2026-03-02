@@ -14,6 +14,7 @@ interface MockPluginRuntime {
 // Mock OpenClaw Plugin API (matching clawdbot-feishu pattern)
 interface MockOpenClawPluginApi {
   registerTool: ReturnType<typeof vi.fn>;
+  registerChannel: ReturnType<typeof vi.fn>;
   on: ReturnType<typeof vi.fn>;
   logger: {
     info: ReturnType<typeof vi.fn>;
@@ -58,6 +59,7 @@ describe("Plugin Entry Point", () => {
 
     mockApi = {
       registerTool: vi.fn(),
+      registerChannel: vi.fn(),
       on: vi.fn(),
       logger: {
         info: vi.fn(),
@@ -82,7 +84,7 @@ describe("Plugin Entry Point", () => {
   describe("Given the plugin is loaded", () => {
     describe("When inspecting the plugin object", () => {
       it("Then should have correct id", () => {
-        expect(plugin).toHaveProperty("id", "agent-team");
+        expect(plugin).toHaveProperty("id", "openclaw-agent-team");
       });
 
       it("Then should have correct name", () => {
@@ -247,7 +249,7 @@ describe("Plugin Entry Point", () => {
       const content = await readFile(manifestPath, "utf-8");
       const manifest = JSON.parse(content);
 
-      expect(manifest.id).toBe("agent-team");
+      expect(manifest.id).toBe("openclaw-agent-team");
     });
 
     it("Then should have correct name", async () => {

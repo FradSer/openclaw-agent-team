@@ -6,6 +6,7 @@ import {
   teamDirectoryExists,
   readTeamConfig,
   resolveTeammatePaths,
+  resolveTeammateSessionsDir,
 } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
 import { getAgentTeamRuntime } from "../runtime.js";
@@ -160,6 +161,10 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
         // Create workspace and agent directories
         await mkdir(workspace, { recursive: true, mode: 0o700 });
         await mkdir(agentDir, { recursive: true, mode: 0o700 });
+
+        // Create sessions directory for teammate
+        const sessionsDir = resolveTeammateSessionsDir(ctx.teamsDir, team_name, name);
+        await mkdir(sessionsDir, { recursive: true, mode: 0o700 });
 
         // Generate session key
         const sessionKey = `agent:${agentId}:main`;
