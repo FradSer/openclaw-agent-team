@@ -18,7 +18,7 @@ import { teamDirectoryExists } from "./storage.js";
 import { setAgentTeamRuntime } from "./runtime.js";
 
 // Plugin constants
-export const PLUGIN_ID = "agent-team";
+export const PLUGIN_ID = "openclaw-agent-team";
 export const PLUGIN_NAME = "Agent Team";
 export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with shared task ledger";
 

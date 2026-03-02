@@ -1,5 +1,5 @@
 {
-  "id": "agent-team",
+  "id": "openclaw-agent-team",
   "name": "Agent Team",
   "version": "1.0.0",
   "description": "Multi-agent team coordination with shared task ledger and inter-agent messaging",
