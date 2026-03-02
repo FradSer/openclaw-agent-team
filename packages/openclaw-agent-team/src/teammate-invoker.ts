@@ -1,4 +1,3 @@
-import type { ClawdbotConfig } from "openclaw/plugin-sdk";
 import { mkdir } from "node:fs/promises";
 import { getAgentTeamRuntime } from "./runtime.js";
 import { createAgentTeamReplyDispatcher } from "./reply-dispatcher.js";
@@ -8,7 +7,6 @@ import {
 } from "./storage.js";
 
 export type InvokeTeammateParams = {
-  cfg: ClawdbotConfig;
   teamName: string;
   teammateName: string;
   message: string;
@@ -18,22 +16,24 @@ export type InvokeTeammateParams = {
 
 /**
  * Invokes a teammate agent with a message from another agent.
- * This wakes up the teammate and allows it to process the message autonomously.
  */
 export async function invokeTeammate(params: InvokeTeammateParams): Promise<void> {
   const core = getAgentTeamRuntime();
-  const { cfg, teamName, teammateName, message, senderName, teamsDir } = params;
+  const { teamName, teammateName, message, senderName, teamsDir } = params;
 
-  const agentId = `teammate-${teamName}-${teammateName}`;
-  const sessionKey = `agent:${agentId}:main`;
+  // Reload config to get latest bindings for route resolution
+  const cfg = await core.config.loadConfig();
 
-  // Resolve route for teammate
   const route = core.channel.routing.resolveAgentRoute({
     cfg,
     channel: "agent-team",
     accountId: "default",
     peer: { kind: "direct", id: `${teamName}:${teammateName}` },
   });
+
+  // Use route values for proper agent identity in sessions
+  const agentId = route.agentId ?? `teammate-${teamName}-${teammateName}`;
+  const sessionKey = route.sessionKey ?? `agent:${agentId}:main`;
 
   // Build context payload
   const ctxPayload = core.channel.reply.finalizeInboundContext({
@@ -42,8 +42,8 @@ export async function invokeTeammate(params: InvokeTeammateParams): Promise<void
     CommandBody: message,
     From: `agent-team:${senderName}`,
     To: `${teamName}:${teammateName}`,
-    SessionKey: route.sessionKey ?? sessionKey,
-    AccountId: "default",
+    SessionKey: sessionKey,
+    AccountId: route.accountId ?? "default",
     ChatType: "direct",
     SenderName: senderName,
     SenderId: senderName,
@@ -65,17 +65,16 @@ export async function invokeTeammate(params: InvokeTeammateParams): Promise<void
   await mkdir(sessionsDir, { recursive: true, mode: 0o700 });
 
   // Record inbound session with custom storePath
-  const persistedSessionKey = ctxPayload.SessionKey ?? sessionKey;
   await core.channel.session.recordInboundSession({
     storePath,
-    sessionKey: persistedSessionKey,
+    sessionKey,
     ctx: ctxPayload,
     createIfMissing: true,
     updateLastRoute: {
-      sessionKey: persistedSessionKey,
+      sessionKey,
       channel: "agent-team",
       to: `${teamName}:${teammateName}`,
-      accountId: "default",
+      accountId: route.accountId ?? "default",
     },
     onRecordError: (err: unknown) => {
       console.error(`[agent-team] Failed to record session for ${agentId}:`, err);

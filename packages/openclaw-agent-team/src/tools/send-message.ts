@@ -1,42 +1,7 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { Mailbox, MAX_MESSAGE_SIZE } from "../mailbox.js";
 import { TeamLedger } from "../ledger.js";
-
-// Dynamic import for internal heartbeat wake function
-// This is an internal OpenClaw API that may not be stable
-type RequestHeartbeatNowFn = (opts?: {
-  reason?: string;
-  coalesceMs?: number;
-  agentId?: string;
-  sessionKey?: string;
-}) => void;
-
-let _requestHeartbeatNow: RequestHeartbeatNowFn | null = null;
-let _heartbeatCheckDone = false;
-
-/**
- * Gets the requestHeartbeatNow function from OpenClaw's internal module.
- * Uses a workaround to avoid static analysis by Vitest/Vite.
- */
-function getRequestHeartbeatNow(): Promise<RequestHeartbeatNowFn | null> {
-  if (_requestHeartbeatNow) return Promise.resolve(_requestHeartbeatNow);
-  if (_heartbeatCheckDone) return Promise.resolve(null);
-
-  // Use dynamic path to avoid static analysis
-  const basePath = "openclaw/dist/plugin-sdk/infra";
-  const modulePath = `${basePath}/heartbeat-wake.js`;
-
-  return import(modulePath)
-    .then((module) => {
-      _requestHeartbeatNow = module.requestHeartbeatNow as RequestHeartbeatNowFn | null;
-      _heartbeatCheckDone = true;
-      return _requestHeartbeatNow;
-    })
-    .catch(() => {
-      _heartbeatCheckDone = true;
-      return null;
-    });
-}
+import { invokeTeammate } from "../teammate-invoker.js";
 
 // Schema for send_message parameters
 export const SendMessageSchema = Type.Object({
@@ -158,17 +123,14 @@ export function createSendMessageTool(
           summary,
         });
 
-        // Wake the teammate via heartbeat (internal API, may not be available)
-        const agentId = `teammate-${teamName}-${recipient}`;
-        const sessionKey = `agent:${agentId}:main`;
-        const requestHeartbeatNow = await getRequestHeartbeatNow();
-        if (requestHeartbeatNow) {
-          requestHeartbeatNow({
-            reason: "teammate-message",
-            sessionKey,
-            coalesceMs: 250, // Batch multiple messages within 250ms
-          });
-        }
+        // Wake the teammate to process the message
+        await invokeTeammate({
+          teamName,
+          teammateName: recipient,
+          message: content,
+          senderName,
+          teamsDir: ctx.teamsDir,
+        });
 
         return {
           messageId: result.messageId,
@@ -207,19 +169,18 @@ export function createSendMessageTool(
           summary,
         });
 
-        // Wake all teammates via heartbeat (internal API, may not be available)
-        const requestHeartbeatNow = await getRequestHeartbeatNow();
-        if (requestHeartbeatNow) {
-          for (const r of recipients) {
-            const agentId = `teammate-${teamName}-${r.name}`;
-            const sessionKey = `agent:${agentId}:main`;
-            requestHeartbeatNow({
-              reason: "teammate-broadcast",
-              sessionKey,
-              coalesceMs: 250, // Batch multiple messages within 250ms
-            });
-          }
-        }
+        // Wake all teammates to process the broadcast
+        await Promise.all(
+          recipients.map((r) =>
+            invokeTeammate({
+              teamName,
+              teammateName: r.name,
+              message: content,
+              senderName,
+              teamsDir: ctx.teamsDir,
+            })
+          )
+        );
 
         return {
           messageId: result.messageId,

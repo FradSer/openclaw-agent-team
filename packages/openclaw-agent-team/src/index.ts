@@ -300,6 +300,7 @@ async function handleBeforePromptBuild(event: unknown): Promise<{ prependContext
 export { TeamLedger } from "./ledger.js";
 export { teamDirectoryExists, readTeamConfig, writeTeamConfig } from "./storage.js";
 export { createContextInjectionHook } from "./context-injection.js";
+export { invokeTeammate } from "./teammate-invoker.js";
 
 // Plugin definition (matching clawdbot-feishu pattern)
 const agentTeamPlugin = {

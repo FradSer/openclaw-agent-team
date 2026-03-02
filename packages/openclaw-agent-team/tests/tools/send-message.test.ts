@@ -1,9 +1,20 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdir, rm, writeFile, readFile } from "node:fs/promises";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { mkdir, rm, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { createSendMessageTool } from "../../src/tools/send-message.js";
 import { createTeamDirectory } from "../../src/storage.js";
 import { TeamLedger } from "../../src/ledger.js";
+
+// Mock invokeTeammate to avoid requiring runtime in tests
+// Factory must be self-contained (hoisted to top of file)
+vi.mock("../../src/teammate-invoker.js", () => ({
+  invokeTeammate: vi.fn(),
+}));
+
+// Import after mock is set up
+import { createSendMessageTool } from "../../src/tools/send-message.js";
+import { invokeTeammate } from "../../src/teammate-invoker.js";
+
+const invokeTeammateMock = vi.mocked(invokeTeammate);
 
 interface SendMessageResponse {
   messageId: string;
@@ -28,6 +39,9 @@ describe("send_message tool", () => {
   let ledger: TeamLedger;
 
   beforeEach(async () => {
+    // Clear mock calls
+    invokeTeammateMock.mockClear();
+
     tempDir = join(process.cwd(), "test-temp", `send-message-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
     ctx = {
@@ -109,6 +123,16 @@ describe("send_message tool", () => {
         expect(message.summary).toBe("Task assignment");
         expect(message.id).toBeDefined();
         expect(message.timestamp).toBeDefined();
+
+        // Verify invokeTeammate was called with correct params
+        expect(invokeTeammateMock).toHaveBeenCalledTimes(1);
+        expect(invokeTeammateMock).toHaveBeenCalledWith({
+          teamName: "test-team",
+          teammateName: "researcher",
+          message: "Focus on the API design",
+          senderName: "lead",
+          teamsDir: tempDir,
+        });
       });
 
       it("Then should store message with correct metadata", async () => {
@@ -146,6 +170,9 @@ describe("send_message tool", () => {
         expect(result).toHaveProperty("error");
         expect(result.error.code).toBe("RECIPIENT_NOT_FOUND");
         expect(result.error.message).toContain("not found");
+
+        // Verify invokeTeammate was NOT called for invalid recipient
+        expect(invokeTeammateMock).not.toHaveBeenCalled();
       });
     });
 
@@ -174,6 +201,9 @@ describe("send_message tool", () => {
         );
         expect(JSON.parse(researcherInbox).content).toBe("Team announcement");
         expect(JSON.parse(coderInbox).content).toBe("Team announcement");
+
+        // Verify invokeTeammate was called for each recipient (3 times)
+        expect(invokeTeammateMock).toHaveBeenCalledTimes(3);
       });
 
       it("Then should deliver broadcast to all inbox files", async () => {
@@ -219,6 +249,9 @@ describe("send_message tool", () => {
         expect(result).toHaveProperty("error");
         expect(result.error.code).toBe("MESSAGE_TOO_LARGE");
         expect(result.error.message).toMatch(/too large|exceed/i);
+
+        // Verify invokeTeammate was NOT called for oversized message
+        expect(invokeTeammateMock).not.toHaveBeenCalled();
       });
     });
   });
