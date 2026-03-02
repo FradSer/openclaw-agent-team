@@ -287,6 +287,8 @@ const agentTeamPlugin = {
 
     const ctx = createPluginContext(api);
 
+    api.logger.info(`[agent-team] Plugin config: teamsDir=${ctx.teamsDir}, pluginConfig.teamsDir=${api.pluginConfig?.teamsDir || "not set"}`);
+
     // Register all tools
     registerTeamTools(api, ctx);
 

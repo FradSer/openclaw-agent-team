@@ -106,6 +106,25 @@ describe("Plugin Entry Point", () => {
   });
 
   describe("Given the register function is called", () => {
+    describe("When using custom teamsDir config", () => {
+      it("Then should log the custom teamsDir from pluginConfig", () => {
+        plugin.register(mockApi);
+        expect(mockApi.logger.info).toHaveBeenCalledWith(
+          expect.stringContaining(`teamsDir=${tempDir}`)
+        );
+      });
+
+      it("Then should log 'not set' when teamsDir is not provided", () => {
+        mockApi.pluginConfig = {
+          maxTeammatesPerTeam: 5,
+        };
+        plugin.register(mockApi);
+        expect(mockApi.logger.info).toHaveBeenCalledWith(
+          expect.stringContaining("pluginConfig.teamsDir=not set")
+        );
+      });
+    });
+
     describe("When registering tools", () => {
       it("Then should register team_create tool", () => {
         plugin.register(mockApi);
