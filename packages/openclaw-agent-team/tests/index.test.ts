@@ -152,57 +152,9 @@ describe("Plugin Entry Point", () => {
         );
       });
 
-      it("Then should register task_create tool", () => {
+      it("Then should register exactly 3 tools", () => {
         plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "task_create" }),
-          expect.objectContaining({ name: "task_create" })
-        );
-      });
-
-      it("Then should register task_list tool", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "task_list" }),
-          expect.objectContaining({ name: "task_list" })
-        );
-      });
-
-      it("Then should register task_claim tool", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "task_claim" }),
-          expect.objectContaining({ name: "task_claim" })
-        );
-      });
-
-      it("Then should register task_complete tool", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "task_complete" }),
-          expect.objectContaining({ name: "task_complete" })
-        );
-      });
-
-      it("Then should register send_message tool", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "send_message" }),
-          expect.objectContaining({ name: "send_message" })
-        );
-      });
-
-      it("Then should register inbox tool", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "inbox" }),
-          expect.objectContaining({ name: "inbox" })
-        );
-      });
-
-      it("Then should register exactly 9 tools", () => {
-        plugin.register(mockApi);
-        expect(mockApi.registerTool).toHaveBeenCalledTimes(9);
+        expect(mockApi.registerTool).toHaveBeenCalledTimes(3);
       });
 
       it("Then tools should have execute function", () => {
@@ -216,12 +168,10 @@ describe("Plugin Entry Point", () => {
     });
 
     describe("When registering hooks", () => {
-      it("Then should register before_prompt_build hook", () => {
+      // No hooks are currently registered
+      it("Then should not register any hooks", () => {
         plugin.register(mockApi);
-        expect(mockApi.on).toHaveBeenCalledWith(
-          "before_prompt_build",
-          expect.any(Function)
-        );
+        expect(mockApi.on).not.toHaveBeenCalled();
       });
     });
 

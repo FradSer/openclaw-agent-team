@@ -7,10 +7,10 @@ export const AGENT_TEAM_CHANNEL = "agent-team";
 
 /**
  * Builds a teammate agent ID from team name and teammate name.
- * Format: teammate-{teamName}-{teammateName}
+ * Format: teammate-{teamName}-{teammateName} (all lowercase for consistency)
  */
 export function buildTeammateAgentId(teamName: string, teammateName: string): string {
-  return `${TEAMMATE_AGENT_ID_PREFIX}${teamName}-${teammateName}`;
+  return `${TEAMMATE_AGENT_ID_PREFIX}${teamName.toLowerCase()}-${teammateName.toLowerCase()}`;
 }
 
 /**
@@ -110,36 +110,27 @@ export const TaskSchema = Type.Object({
 
 export type Task = Static<typeof TaskSchema>;
 
-// Team Message
+// Plugin Configuration
 
-export const TeamMessageTypeSchema = Type.Union([
-  Type.Literal("message"),
-  Type.Literal("broadcast"),
-  Type.Literal("task_update"),
-  Type.Literal("shutdown_request"),
-]);
-
-export const TeamMessageSchema = Type.Object({
-  id: Type.String(),
-  from: Type.String(),
-  to: Type.Optional(Type.String()),
-  type: TeamMessageTypeSchema,
-  content: Type.String(),
-  summary: Type.Optional(Type.String()),
-  timestamp: Type.Number(),
+export const TeammatePathTemplatesSchema = Type.Object({
+  workspaceTemplate: Type.Optional(Type.String()),
+  agentDirTemplate: Type.Optional(Type.String()),
 });
 
-export type TeamMessage = Static<typeof TeamMessageSchema>;
-
-// Plugin Configuration
+export type TeammatePathTemplates = Static<typeof TeammatePathTemplatesSchema>;
 
 export const AgentTeamConfigSchema = Type.Object({
   maxTeammatesPerTeam: Type.Number({ default: 10, minimum: 1, maximum: 50 }),
   defaultAgentType: Type.String({ default: "general-purpose" }),
   teamsDir: Type.Optional(Type.String()),
+  pathTemplates: Type.Optional(TeammatePathTemplatesSchema),
 });
 
 export type AgentTeamConfig = Static<typeof AgentTeamConfigSchema>;
+
+// Default path templates for teammate workspace/agent directories
+export const DEFAULT_WORKSPACE_TEMPLATE = "{teamsDir}/{teamName}/agents/{teammateName}/workspace";
+export const DEFAULT_AGENT_DIR_TEMPLATE = "{teamsDir}/{teamName}/agents/{teammateName}/agent";
 
 // Task Filter for listing
 
@@ -150,17 +141,6 @@ export const TaskFilterSchema = Type.Object({
 });
 
 export type TaskFilter = Static<typeof TaskFilterSchema>;
-
-// Message sending parameters
-
-export const SendMessageParamsSchema = Type.Object({
-  type: Type.Union([Type.Literal("message"), Type.Literal("broadcast")]),
-  recipient: Type.Optional(Type.String()),
-  content: Type.String({ maxLength: 102400 }), // 100KB max
-  summary: Type.String({ minLength: 5, maxLength: 100 }),
-});
-
-export type SendMessageParams = Static<typeof SendMessageParamsSchema>;
 
 // Validation helper functions
 
@@ -174,10 +154,6 @@ export function validateTeammateDefinition(value: unknown): boolean {
 
 export function validateTask(value: unknown): boolean {
   return Value.Check(TaskSchema, value);
-}
-
-export function validateTeamMessage(value: unknown): boolean {
-  return Value.Check(TeamMessageSchema, value);
 }
 
 export function validateAgentTeamConfig(value: unknown): boolean {

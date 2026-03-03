@@ -1,16 +1,45 @@
 import { Type, type Static } from "@sinclair/typebox";
-import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  TEAMMATE_NAME_PATTERN,
-  teamDirectoryExists,
-  readTeamConfig,
-  resolveTeammatePaths,
-} from "../storage.js";
+import { teamDirectoryExists } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
 import { getAgentTeamRuntime } from "../runtime.js";
-import type { TeammateDefinition, TeammateToolsSchema } from "../types.js";
-import { buildTeammateAgentId, AGENT_TEAM_CHANNEL } from "../types.js";
+import { maybeSpawnTeammate } from "../dynamic-teammate.js";
+import type { TeammatePathTemplates } from "../types.js";
+
+// Mutex queue to serialize spawns per team and prevent race conditions
+const teamSpawnQueues = new Map<string, Promise<unknown>>();
+
+/**
+ * Executes a function with a per-team mutex to prevent concurrent spawns
+ * from racing on config updates. Uses a queue-based approach where each
+ * operation waits for the previous one to complete before starting.
+ */
+async function withTeamLock<T>(teamName: string, fn: () => Promise<T>): Promise<T> {
+  // Get the current tail of the queue (or undefined if queue is empty)
+  const currentTail = teamSpawnQueues.get(teamName);
+
+  // Create our promise that will be resolved when we're done
+  let releaseLock: () => void;
+  const ourPromise = new Promise<void>((resolve) => {
+    releaseLock = resolve;
+  });
+
+  // Put our promise at the tail of the queue BEFORE waiting
+  // This ensures the next operation will wait for us
+  teamSpawnQueues.set(teamName, ourPromise);
+
+  try {
+    // Wait for the previous operation to complete (if any)
+    if (currentTail) {
+      await currentTail;
+    }
+    // Now it's our turn - execute the function
+    return await fn();
+  } finally {
+    // Release the lock for the next operation
+    releaseLock!();
+  }
+}
 
 // Schema for teammate spawn parameters
 export const TeammateSpawnSchema = Type.Object({
@@ -46,6 +75,10 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
+  config?: {
+    maxTeammatesPerTeam?: number;
+    pathTemplates?: TeammatePathTemplates;
+  };
 }
 
 // Tool type for testing compatibility
@@ -61,14 +94,6 @@ export interface TeammateSpawnTool {
 const DEFAULT_MAX_TEAMMATES = 10;
 
 /**
- * Validates a teammate name against the allowed pattern.
- * Teammate names must be 1-100 characters and contain only letters, numbers, underscores, and hyphens.
- */
-function validateTeammateName(name: string): boolean {
-  return TEAMMATE_NAME_PATTERN.test(name);
-}
-
-/**
  * Creates a teammate_spawn tool that spawns new teammates within a team.
  */
 export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
@@ -78,150 +103,78 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
     description: "Spawns a new teammate agent within an existing team",
     schema: TeammateSpawnSchema,
     handler: async (params: TeammateSpawnParams): Promise<TeammateSpawnResponse | ToolError> => {
-      const { team_name, name, agent_type, model, tools } = params;
-
-      // Check if team exists
-      const exists = await teamDirectoryExists(ctx.teamsDir, team_name);
-      if (!exists) {
-        return {
-          error: {
-            code: "TEAM_NOT_FOUND",
-            message: `Team "${team_name}" not found`,
-          },
-        };
-      }
-
-      // Read team config to check status
-      const config = await readTeamConfig(ctx.teamsDir, team_name);
-      if (!config) {
-        return {
-          error: {
-            code: "TEAM_NOT_FOUND",
-            message: `Team "${team_name}" configuration not found`,
-          },
-        };
-      }
-
-      // Check if team is active
-      if (config.metadata.status !== "active") {
-        return {
-          error: {
-            code: "TEAM_NOT_ACTIVE",
-            message: `Team "${team_name}" is not active. Current status: ${config.metadata.status}`,
-          },
-        };
-      }
-
-      // Validate teammate name format
-      if (!validateTeammateName(name)) {
-        return {
-          error: {
-            code: "INVALID_TEAMMATE_NAME",
-            message: `Teammate name "${name}" contains invalid characters. Only letters, numbers, underscores, and hyphens are allowed.`,
-          },
-        };
-      }
-
-      // Generate agent ID using helper
-      const agentId = buildTeammateAgentId(team_name, name);
-
-      // Resolve paths for teammate
-      const { workspace, agentDir } = resolveTeammatePaths(ctx.teamsDir, team_name, name);
-
-      // Open ledger to check capacity and duplicate names
-      const ledgerPath = join(ctx.teamsDir, team_name, "ledger.db");
-      const ledger = new TeamLedger(ledgerPath);
-
-      try {
-        // Check current member count
-        const currentMembers = await ledger.listMembers();
-        if (currentMembers.length >= DEFAULT_MAX_TEAMMATES) {
-          ledger.close();
-          return {
-            error: {
-              code: "TEAM_AT_CAPACITY",
-              message: `Team "${team_name}" has reached maximum teammates (${DEFAULT_MAX_TEAMMATES})`,
-            },
-          };
-        }
-
-        // Check for duplicate name
-        const duplicateName = currentMembers.find((m) => m.name === name);
-        if (duplicateName) {
-          ledger.close();
-          return {
-            error: {
-              code: "DUPLICATE_TEAMMATE_NAME",
-              message: `Teammate "${name}" already exists in team "${team_name}"`,
-            },
-          };
-        }
-
-        // Create workspace and agent directories
-        await mkdir(workspace, { recursive: true, mode: 0o700 });
-        await mkdir(agentDir, { recursive: true, mode: 0o700 });
-
-        // Sessions are stored in standard openclaw session store path
-        // (~/.openclaw/agents/{agentId}/sessions/) so they appear in TUI
-
-        // Generate session key
-        const sessionKey = `agent:${agentId}:main`;
-
-        // Create teammate definition
-        const now = Date.now();
-        const teammate: TeammateDefinition = {
-          name,
-          agentId,
-          sessionKey,
-          agentType: agent_type ?? "general-purpose",
-          status: "idle",
-          joinedAt: now,
-        };
-
-        // Add optional fields
-        if (model !== undefined) {
-          teammate.model = model;
-        }
-        if (tools !== undefined) {
-          teammate.tools = tools as Static<typeof TeammateToolsSchema>;
-        }
-
-        // Add teammate to ledger
-        await ledger.addMember(teammate);
-
-        // Register agent via runtime config
-        const runtime = getAgentTeamRuntime();
-        const cfg = await runtime.config.loadConfig();
-
-        const updatedCfg = {
-          ...cfg,
-          agents: {
-            ...cfg.agents,
-            list: [...(cfg.agents?.list ?? []), { id: agentId, workspace, agentDir }],
-          },
-          bindings: [
-            ...(cfg.bindings ?? []),
-            {
-              agentId,
-              match: {
-                channel: AGENT_TEAM_CHANNEL,
-                peer: { kind: "direct" as const, id: `${team_name}:${name}` },
-              },
-            },
-          ],
-        };
-
-        await runtime.config.writeConfigFile(updatedCfg);
-
-        return {
-          agentId,
-          name,
-          sessionKey,
-          status: "idle",
-        };
-      } finally {
-        ledger.close();
-      }
+      // Use per-team lock to prevent race conditions when spawning multiple teammates concurrently
+      return withTeamLock(params.team_name, () => spawnTeammateHandler(ctx, params));
     },
   };
+}
+
+/**
+ * Internal handler for spawning teammates using the dynamic-teammate module.
+ */
+async function spawnTeammateHandler(
+  ctx: PluginContext,
+  params: TeammateSpawnParams
+): Promise<TeammateSpawnResponse | ToolError> {
+  const { team_name, name, agent_type, model, tools } = params;
+
+  // Check if team exists
+  const exists = await teamDirectoryExists(ctx.teamsDir, team_name);
+  if (!exists) {
+    return {
+      error: {
+        code: "TEAM_NOT_FOUND",
+        message: `Team "${team_name}" not found`,
+      },
+    };
+  }
+
+  // Open ledger
+  const ledgerPath = join(ctx.teamsDir, team_name, "ledger.db");
+  const ledger = new TeamLedger(ledgerPath);
+
+  try {
+    const spawnParams: {
+      teamsDir: string;
+      teamName: string;
+      teammateName: string;
+      agentType?: string;
+      model?: string;
+      tools?: { allow?: string[]; deny?: string[] };
+      pathTemplates?: TeammatePathTemplates;
+      maxTeammates: number;
+      runtime: ReturnType<typeof getAgentTeamRuntime>;
+      ledger: TeamLedger;
+      log: (msg: string) => void;
+    } = {
+      teamsDir: ctx.teamsDir,
+      teamName: team_name,
+      teammateName: name,
+      maxTeammates: ctx.config?.maxTeammatesPerTeam ?? DEFAULT_MAX_TEAMMATES,
+      runtime: getAgentTeamRuntime(),
+      ledger,
+      log: (msg) => console.log(msg),
+    };
+
+    // Only add optional properties if they are defined
+    if (agent_type !== undefined) spawnParams.agentType = agent_type;
+    if (model !== undefined) spawnParams.model = model;
+    if (tools !== undefined) spawnParams.tools = tools;
+    if (ctx.config?.pathTemplates !== undefined) spawnParams.pathTemplates = ctx.config.pathTemplates;
+
+    const result = await maybeSpawnTeammate(spawnParams);
+
+    if (result.error) {
+      return { error: result.error };
+    }
+
+    return {
+      agentId: result.agentId!,
+      name,
+      sessionKey: result.sessionKey!,
+      status: "idle",
+    };
+  } finally {
+    ledger.close();
+  }
 }

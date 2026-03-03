@@ -1,6 +1,6 @@
 import { Type, type Static } from "@sinclair/typebox";
 import { join } from "node:path";
-import { teamDirectoryExists, readTeamConfig, writeTeamConfig } from "../storage.js";
+import { teamDirectoryExists, readTeamConfig, writeTeamConfig, deleteTeamDirectory } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
 import { getAgentTeamRuntime } from "../runtime.js";
 
@@ -123,6 +123,9 @@ export function createTeamShutdownTool(ctx: PluginContext): TeamShutdownTool {
         config.metadata.status = "shutdown";
         config.metadata.updatedAt = shutdownAt;
         await writeTeamConfig(ctx.teamsDir, team_name, config);
+
+        // Delete the team directory after all updates are complete
+        await deleteTeamDirectory(ctx.teamsDir, team_name);
 
         return {
           teamId: config.id,

@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile, stat } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readFile, writeFile, stat, rm } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import type { TeamConfig } from "./types.js";
 
@@ -31,7 +31,7 @@ export function sanitizeTeammateName(name: string): string {
 
 /**
  * Creates a team directory with the required structure.
- * Creates: teamDir/, teamDir/config.json, teamDir/ledger.db, teamDir/inbox/, teamDir/agents/
+ * Creates: teamDir/, teamDir/config.json, teamDir/agents/
  */
 export async function createTeamDirectory(
   teamsDir: string,
@@ -51,13 +51,6 @@ export async function createTeamDirectory(
   // Create empty config.json
   const configPath = join(teamDir, "config.json");
   await writeFile(configPath, "{}", { mode: 0o600 });
-
-  // Create empty ledger.db
-  const ledgerPath = join(teamDir, "ledger.db");
-  await writeFile(ledgerPath, "", { mode: 0o600 });
-
-  // Create inbox directory
-  await mkdir(join(teamDir, "inbox"), { mode: 0o700 });
 
   // Create agents directory
   await mkdir(join(teamDir, "agents"), { mode: 0o700 });
@@ -81,6 +74,24 @@ export async function teamDirectoryExists(
   } catch {
     return false;
   }
+}
+
+/**
+ * Deletes a team directory and all its contents.
+ * Uses recursive deletion with force option to handle non-existent directories.
+ */
+export async function deleteTeamDirectory(
+  teamsDir: string,
+  teamName: string
+): Promise<void> {
+  if (!validateTeamName(teamName)) {
+    throw new Error(
+      `Invalid team name "${teamName}". Must be 1-50 characters and contain only letters, numbers, underscores, and hyphens.`
+    );
+  }
+
+  const teamDir = join(teamsDir, teamName);
+  await rm(teamDir, { recursive: true, force: true });
 }
 
 /**
@@ -114,7 +125,7 @@ export async function readTeamConfig(
 }
 
 /**
- * Resolves paths for a teammate's workspace, agent directory, and inbox.
+ * Resolves paths for a teammate's workspace and agent directory.
  */
 export function resolveTeammatePaths(
   teamsDir: string,
@@ -123,7 +134,6 @@ export function resolveTeammatePaths(
 ): {
   workspace: string;
   agentDir: string;
-  inboxPath: string;
 } {
   const sanitized = sanitizeTeammateName(teammateName);
   const agentBase = resolveTeamPath(teamsDir, teamName, "agents", sanitized);
@@ -131,7 +141,6 @@ export function resolveTeammatePaths(
   return {
     workspace: join(agentBase, "workspace"),
     agentDir: join(agentBase, "agent"),
-    inboxPath: resolveTeamPath(teamsDir, teamName, "inbox", sanitized, "messages.jsonl"),
   };
 }
 
@@ -189,13 +198,38 @@ export function resolveTeamPath(
   return targetPath;
 }
 
-// Import sep for path separator check
-import { sep } from "node:path";
-
 /**
  * Gets the base directory for teams storage.
  * Returns ~/.openclaw/teams/ by default.
  */
 export function getTeamsBaseDir(): string {
   return DEFAULT_TEAMS_DIR();
+}
+
+/**
+ * Resolves a path template with variable substitution.
+ * Supported variables: {teamsDir}, {teamName}, {teammateName}, {agentId}
+ * Also resolves ~ to home directory.
+ */
+export function resolveTemplatePath(
+  template: string,
+  vars: {
+    teamsDir: string;
+    teamName: string;
+    teammateName: string;
+    agentId: string;
+  }
+): string {
+  let result = template;
+  result = result.replace("{teamsDir}", vars.teamsDir);
+  result = result.replace("{teamName}", vars.teamName);
+  result = result.replace("{teammateName}", vars.teammateName);
+  result = result.replace("{agentId}", vars.agentId);
+
+  // Resolve ~ to home directory
+  if (result.startsWith("~/")) {
+    result = join(homedir(), result.slice(2));
+  }
+
+  return result;
 }

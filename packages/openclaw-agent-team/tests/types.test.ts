@@ -3,14 +3,12 @@ import type {
   TeamConfig,
   TeammateDefinition,
   Task,
-  TeamMessage,
   AgentTeamConfig,
 } from "../src/types.js";
 import {
   validateTeamConfig,
   validateTeammateDefinition,
   validateTask,
-  validateTeamMessage,
   validateAgentTeamConfig,
 } from "../src/types.js";
 
@@ -168,55 +166,6 @@ describe("Type Definitions", () => {
       };
 
       expect(validateTask(taskWithOptional)).toBe(true);
-    });
-  });
-
-  describe("TeamMessage", () => {
-    it("should have required fields", () => {
-      const message: TeamMessage = {
-        id: "msg-123",
-        from: "lead",
-        type: "message",
-        content: "Hello team",
-        timestamp: Date.now(),
-      };
-
-      expect(message.id).toBeDefined();
-      expect(message.from).toBeDefined();
-      expect(message.type).toBeOneOf([
-        "message",
-        "broadcast",
-        "task_update",
-        "shutdown_request",
-      ]);
-      expect(message.content).toBeDefined();
-      expect(message.timestamp).toBeDefined();
-    });
-
-    it("should validate with TypeBox schema", () => {
-      const validMessage = {
-        id: "msg-123",
-        from: "lead",
-        to: "researcher",
-        type: "message",
-        content: "Hello team",
-        summary: "Greeting",
-        timestamp: Date.now(),
-      };
-
-      expect(validateTeamMessage(validMessage)).toBe(true);
-    });
-
-    it("should allow broadcast without recipient", () => {
-      const broadcast: TeamMessage = {
-        id: "msg-456",
-        from: "lead",
-        type: "broadcast",
-        content: "Team announcement",
-        timestamp: Date.now(),
-      };
-
-      expect(validateTeamMessage(broadcast)).toBe(true);
     });
   });
 

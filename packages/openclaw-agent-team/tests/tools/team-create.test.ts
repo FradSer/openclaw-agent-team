@@ -70,17 +70,9 @@ describe("team_create tool", () => {
         const configStat = await stat(configFile);
         expect(configStat.isFile()).toBe(true);
 
-        const inboxDir = join(teamDir, "inbox");
-        const inboxStat = await stat(inboxDir);
-        expect(inboxStat.isDirectory()).toBe(true);
-
         const agentsDir = join(teamDir, "agents");
         const agentsStat = await stat(agentsDir);
         expect(agentsStat.isDirectory()).toBe(true);
-
-        const ledgerFile = join(teamDir, "ledger.db");
-        const ledgerStat = await stat(ledgerFile);
-        expect(ledgerStat.isFile()).toBe(true);
       });
 
       it("Then should write team config with UUID matching response", async () => {

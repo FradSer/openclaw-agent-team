@@ -106,21 +106,9 @@ describe("Storage Module", () => {
       const configStat = await stat(configFile);
       expect(configStat.isFile()).toBe(true);
 
-      const inboxDir = join(teamDir, "inbox");
-      const inboxStat = await stat(inboxDir);
-      expect(inboxStat.isDirectory()).toBe(true);
-
       const agentsDir = join(teamDir, "agents");
       const agentsStat = await stat(agentsDir);
       expect(agentsStat.isDirectory()).toBe(true);
-    });
-
-    it("should create ledger.db file", async () => {
-      await createTeamDirectory(tempDir, "test-team");
-
-      const ledgerFile = join(tempDir, "test-team", "ledger.db");
-      const ledgerStat = await stat(ledgerFile);
-      expect(ledgerStat.isFile()).toBe(true);
     });
 
     it("should throw for invalid team name", async () => {
@@ -183,7 +171,6 @@ describe("Storage Module", () => {
 
       expect(paths.workspace).toBe(join(tempDir, "my-team", "agents", "researcher", "workspace"));
       expect(paths.agentDir).toBe(join(tempDir, "my-team", "agents", "researcher", "agent"));
-      expect(paths.inboxPath).toBe(join(tempDir, "my-team", "inbox", "researcher", "messages.jsonl"));
     });
   });
 

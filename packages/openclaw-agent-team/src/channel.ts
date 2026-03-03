@@ -78,6 +78,8 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
   gateway: {
     startAccount: async () => {
       // No external listener needed - invocation happens via invokeTeammate()
+      // Return stop function to signal successful start and prevent auto-restart loops
+      return { stop: () => {} };
     },
   },
   config: {

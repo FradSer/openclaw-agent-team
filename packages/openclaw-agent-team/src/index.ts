@@ -1,20 +1,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { readdir } from "node:fs/promises";
 import type { TSchema } from "@sinclair/typebox";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
-import { AgentTeamConfigSchema, parseTeammateAgentId } from "./types.js";
+import { AgentTeamConfigSchema, AGENT_TEAM_CHANNEL } from "./types.js";
 import { createTeamCreateTool } from "./tools/team-create.js";
 import { createTeamShutdownTool } from "./tools/team-shutdown.js";
 import { createTeammateSpawnTool } from "./tools/teammate-spawn.js";
-import { createTaskCreateTool } from "./tools/task-create.js";
-import { createTaskListTool } from "./tools/task-list.js";
-import { createTaskClaimTool } from "./tools/task-claim.js";
-import { createTaskCompleteTool } from "./tools/task-complete.js";
-import { createSendMessageTool } from "./tools/send-message.js";
-import { createInboxTool } from "./tools/inbox.js";
-import { createContextInjectionHook } from "./context-injection.js";
 import { TeamLedger } from "./ledger.js";
-import { teamDirectoryExists } from "./storage.js";
+import { teamDirectoryExists, resolveTeammatePaths } from "./storage.js";
 import { setAgentTeamRuntime } from "./runtime.js";
 import { agentTeamChannelPlugin } from "./channel.js";
 
@@ -139,14 +133,6 @@ function registerTool<P>(
  * Registers all team management tools.
  */
 function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
-  // Placeholder session context for tools that need it
-  const placeholderSessionCtx: SessionContext = {
-    teamsDir: ctx.teamsDir,
-    teamName: "",
-    teammateName: "",
-    sessionKey: "",
-  };
-
   // Team management tools
   const teamCreateTool = createTeamCreateTool(ctx);
   registerTool(api, {
@@ -175,132 +161,140 @@ function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
     parameters: teammateSpawnTool.schema,
     run: (params) => teammateSpawnTool.handler(params as never),
   });
-
-  // Task management tools
-  const taskCreateTool = createTaskCreateTool(ctx);
-  registerTool(api, {
-    name: "task_create",
-    label: "Task Create",
-    description: "Creates a new task within a team with optional dependencies",
-    parameters: taskCreateTool.schema,
-    run: (params) => taskCreateTool.handler(params as never),
-  });
-
-  const taskListTool = createTaskListTool(ctx);
-  registerTool(api, {
-    name: "task_list",
-    label: "Task List",
-    description: "Lists tasks for a team with optional filtering",
-    parameters: taskListTool.schema,
-    run: (params) => taskListTool.handler(params as never),
-  });
-
-  const taskClaimTool = createTaskClaimTool(ctx, placeholderSessionCtx);
-  registerTool(api, {
-    name: "task_claim",
-    label: "Task Claim",
-    description: "Claims an available task for the current agent session",
-    parameters: taskClaimTool.schema,
-    run: (params) => taskClaimTool.handler(params as never),
-  });
-
-  const taskCompleteTool = createTaskCompleteTool(ctx, placeholderSessionCtx);
-  registerTool(api, {
-    name: "task_complete",
-    label: "Task Complete",
-    description: "Marks a claimed task as completed",
-    parameters: taskCompleteTool.schema,
-    run: (params) => taskCompleteTool.handler(params as never),
-  });
-
-  // Messaging tools
-  const sendMessageTool = createSendMessageTool(ctx, "", "", ctx.getTeamLedger(""));
-  registerTool(api, {
-    name: "send_message",
-    label: "Send Message",
-    description: "Send a direct message to a teammate or broadcast to all teammates",
-    parameters: sendMessageTool.schema,
-    run: async () => ({ error: { code: "NOT_CONFIGURED", message: "Tool not configured for this session" } }),
-  });
-
-  const inboxTool = createInboxTool(placeholderSessionCtx);
-  registerTool(api, {
-    name: "inbox",
-    label: "Inbox",
-    description: "Read messages from your inbox",
-    parameters: inboxTool.schema,
-    run: (params) => inboxTool.handler(params as never),
-  });
-}
-
-/**
- * Gets session context from the current session.
- * Attempts to extract team/teammate info from:
- * 1. Direct event properties (teamName, teammateName)
- * 2. Parsing sessionKey (format: agent:teammate-{team}-{name}:main)
- */
-function getSessionContext(event: unknown): SessionContext | null {
-  const sessionEvent = event as {
-    sessionKey?: string;
-    teamName?: string;
-    teammateName?: string;
-    teamsDir?: string;
-    agentId?: string;
-  };
-
-  if (!sessionEvent.sessionKey) {
-    return null;
-  }
-
-  // Try to get team/teammate from direct properties first
-  let teamName = sessionEvent.teamName;
-  let teammateName = sessionEvent.teammateName;
-
-  // If not provided directly, try to parse from sessionKey or agentId
-  if (!teamName || !teammateName) {
-    // sessionKey format: agent:teammate-{teamName}-{teammateName}:main
-    // or agentId format: teammate-{teamName}-{teammateName}
-    const agentId = sessionEvent.agentId || sessionEvent.sessionKey.split(":")[1];
-    if (agentId) {
-      const parsed = parseTeammateAgentId(agentId);
-      if (parsed) {
-        teamName = teamName || parsed.teamName;
-        teammateName = teammateName || parsed.teammateName;
-      }
-    }
-  }
-
-  if (!teamName || !teammateName) {
-    return null;
-  }
-
-  return {
-    teamsDir: sessionEvent.teamsDir || join(homedir(), ".openclaw", "teams"),
-    teamName,
-    teammateName,
-    sessionKey: sessionEvent.sessionKey,
-  };
-}
-
-/**
- * Handles the before_prompt_build hook for context injection.
- */
-async function handleBeforePromptBuild(event: unknown): Promise<{ prependContext?: string }> {
-  const sessionCtx = getSessionContext(event);
-
-  if (!sessionCtx) {
-    return { prependContext: "" };
-  }
-
-  const hook = createContextInjectionHook(sessionCtx, { clearAfterRead: true });
-  return hook();
 }
 
 // Re-export types and utilities for external use
 export { TeamLedger } from "./ledger.js";
 export { teamDirectoryExists, readTeamConfig, writeTeamConfig } from "./storage.js";
-export { createContextInjectionHook } from "./context-injection.js";
-export { invokeTeammate } from "./teammate-invoker.js";
+
+/**
+ * Syncs all team members from ledgers to the OpenClaw config.
+ * This repairs any missing agent entries caused by race conditions during spawn.
+ */
+async function syncTeammatesToConfig(
+  runtime: PluginRuntime,
+  teamsDir: string,
+  log: (msg: string) => void
+): Promise<void> {
+  try {
+    // Read all team directories
+    let teamDirs: string[];
+    try {
+      teamDirs = await readdir(teamsDir);
+    } catch {
+      return; // Directory doesn't exist, nothing to sync
+    }
+
+    if (teamDirs.length === 0) {
+      return;
+    }
+
+    log(`[agent-team] Starting sync for ${teamDirs.length} teams`);
+
+    const cfg = await runtime.config.loadConfig();
+    const existingAgentIds = new Set((cfg.agents?.list ?? []).map(a => a.id));
+    const agentsToAdd: Array<{
+      agentId: string;
+      teamName: string;
+      memberName: string;
+      workspace: string;
+      agentDir: string;
+    }> = [];
+
+    // First, collect all agents that need to be added
+    for (const teamName of teamDirs) {
+      // Skip non-directories
+      const teamPath = join(teamsDir, teamName);
+      try {
+        const stat = await import("node:fs/promises").then(fs => fs.stat(teamPath));
+        if (!stat.isDirectory()) {
+          continue;
+        }
+      } catch {
+        continue;
+      }
+
+      const ledgerPath = join(teamsDir, teamName, "ledger.db");
+      const ledger = new TeamLedger(ledgerPath);
+
+      try {
+        const members = await ledger.listMembers();
+
+        for (const member of members) {
+          if (member.status === "shutdown") {
+            continue;
+          }
+
+          if (!existingAgentIds.has(member.agentId)) {
+            const { workspace, agentDir } = resolveTeammatePaths(teamsDir, teamName, member.name);
+            agentsToAdd.push({
+              agentId: member.agentId,
+              teamName,
+              memberName: member.name,
+              workspace,
+              agentDir,
+            });
+            existingAgentIds.add(member.agentId); // Prevent duplicates within sync
+          }
+        }
+      } catch (err) {
+        log(`[agent-team] Error reading team ${teamName}: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        ledger.close();
+      }
+    }
+
+    if (agentsToAdd.length === 0) {
+      log(`[agent-team] Sync complete - no missing agents`);
+      return;
+    }
+
+    log(`[agent-team] Found ${agentsToAdd.length} missing agents to sync`);
+
+    // Now add all agents in a single config update
+    const currentCfg = await runtime.config.loadConfig();
+    const currentAgentIds = new Set((currentCfg.agents?.list ?? []).map(a => a.id));
+
+    const newAgents = agentsToAdd.filter(a => !currentAgentIds.has(a.agentId));
+    if (newAgents.length === 0) {
+      log(`[agent-team] Sync complete - agents already exist`);
+      return;
+    }
+
+    const updatedCfg = {
+      ...currentCfg,
+      agents: {
+        ...currentCfg.agents,
+        list: [
+          ...(currentCfg.agents?.list ?? []),
+          ...newAgents.map(a => ({
+            id: a.agentId,
+            workspace: a.workspace,
+            agentDir: a.agentDir,
+          })),
+        ],
+      },
+      bindings: [
+        ...(currentCfg.bindings ?? []),
+        ...newAgents.map(a => ({
+          agentId: a.agentId,
+          match: {
+            channel: AGENT_TEAM_CHANNEL,
+            peer: {
+              kind: "direct" as const,
+              id: `${a.teamName.toLowerCase()}:${a.memberName.toLowerCase()}`
+            },
+          },
+        })),
+      ],
+    };
+
+    await runtime.config.writeConfigFile(updatedCfg);
+    log(`[agent-team] Synced ${newAgents.length} missing agents: ${newAgents.map(a => a.agentId).join(", ")}`);
+  } catch (err) {
+    log(`[agent-team] Error syncing teammates: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 // Plugin definition (matching clawdbot-feishu pattern)
 const agentTeamPlugin = {
@@ -321,11 +315,21 @@ const agentTeamPlugin = {
     // Register channel plugin (KEY CHANGE for teammate invocation)
     api.registerChannel({ plugin: agentTeamChannelPlugin });
 
+    // Sync teammates on startup (async, non-blocking)
+    const safeLog = (msg: string) => {
+      try {
+        api.logger.info(msg);
+      } catch {
+        // Ignore logging errors
+      }
+    };
+    // Use setTimeout to ensure sync doesn't block plugin registration
+    setTimeout(() => {
+      syncTeammatesToConfig(api.runtime, ctx.teamsDir, safeLog).catch(() => {});
+    }, 100);
+
     // Register all tools
     registerTeamTools(api, ctx);
-
-    // Register context injection hook for message delivery
-    api.on("before_prompt_build", handleBeforePromptBuild);
 
     api.logger.info("[agent-team] Plugin registered successfully");
   },

@@ -143,6 +143,36 @@ describe("teammate_spawn tool", () => {
 
         expect(result.agentId).toBe("teammate-id-format-team-researcher");
       });
+
+      it("Then should normalize agent ID to lowercase", async () => {
+        await createTestTeam("MyTeam");
+        const tool = createTeammateSpawnTool(ctx);
+        const result = (await tool.handler({
+          team_name: "MyTeam",
+          name: "Alice",
+          agent_type: "Explore",
+        })) as TeammateSpawnResponse;
+
+        expect(result.agentId).toBe("teammate-myteam-alice");
+      });
+
+      it("Then should normalize binding peer ID to lowercase", async () => {
+        await createTestTeam("BindingTeam");
+        const tool = createTeammateSpawnTool(ctx);
+        await tool.handler({
+          team_name: "BindingTeam",
+          name: "Charlie",
+          agent_type: "Explore",
+        });
+
+        // Get the mock runtime and verify binding peer ID is lowercase
+        const { getAgentTeamRuntime } = await import("../../src/runtime.js");
+        const runtime = getAgentTeamRuntime();
+        const writeCall = (runtime.config.writeConfigFile as ReturnType<typeof vi.fn>).mock.calls[0][0];
+
+        expect(writeCall.bindings).toHaveLength(1);
+        expect(writeCall.bindings[0].match.peer.id).toBe("bindingteam:charlie");
+      });
     });
 
     describe("When spawning with tool restrictions", () => {
