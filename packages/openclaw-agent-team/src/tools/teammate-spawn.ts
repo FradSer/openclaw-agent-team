@@ -6,7 +6,6 @@ import {
   teamDirectoryExists,
   readTeamConfig,
   resolveTeammatePaths,
-  resolveTeammateSessionsDir,
 } from "../storage.js";
 import { TeamLedger } from "../ledger.js";
 import { getAgentTeamRuntime } from "../runtime.js";
@@ -162,9 +161,8 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
         await mkdir(workspace, { recursive: true, mode: 0o700 });
         await mkdir(agentDir, { recursive: true, mode: 0o700 });
 
-        // Create sessions directory for teammate
-        const sessionsDir = resolveTeammateSessionsDir(ctx.teamsDir, team_name, name);
-        await mkdir(sessionsDir, { recursive: true, mode: 0o700 });
+        // Sessions are stored in standard openclaw session store path
+        // (~/.openclaw/agents/{agentId}/sessions/) so they appear in TUI
 
         // Generate session key
         const sessionKey = `agent:${agentId}:main`;

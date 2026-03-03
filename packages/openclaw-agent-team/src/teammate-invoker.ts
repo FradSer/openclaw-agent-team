@@ -1,10 +1,5 @@
-import { mkdir } from "node:fs/promises";
 import { getAgentTeamRuntime } from "./runtime.js";
 import { createAgentTeamReplyDispatcher } from "./reply-dispatcher.js";
-import {
-  resolveTeammateSessionStorePath,
-  resolveTeammateSessionsDir,
-} from "./storage.js";
 
 export type InvokeTeammateParams = {
   teamName: string;
@@ -16,6 +11,10 @@ export type InvokeTeammateParams = {
 
 /**
  * Invokes a teammate agent with a message from another agent.
+ *
+ * Sessions are stored in the standard openclaw session store path
+ * (~/.openclaw/agents/{agentId}/sessions/sessions.json) so they
+ * appear in the TUI's /session list.
  */
 export async function invokeTeammate(params: InvokeTeammateParams): Promise<void> {
   const core = getAgentTeamRuntime();
@@ -57,14 +56,11 @@ export async function invokeTeammate(params: InvokeTeammateParams): Promise<void
     OriginatingTo: `${teamName}:${teammateName}`,
   });
 
-  // Resolve session paths in teamsDir
-  const storePath = resolveTeammateSessionStorePath(teamsDir, teamName, teammateName);
-  const sessionsDir = resolveTeammateSessionsDir(teamsDir, teamName, teammateName);
+  // Resolve session store path using standard openclaw path resolution
+  // This ensures sessions appear in TUI's /session list
+  const storePath = core.channel.session.resolveStorePath(cfg.session?.store, { agentId });
 
-  // Ensure sessions directory exists
-  await mkdir(sessionsDir, { recursive: true, mode: 0o700 });
-
-  // Record inbound session with custom storePath
+  // Record inbound session using standard session store path
   await core.channel.session.recordInboundSession({
     storePath,
     sessionKey,
@@ -90,19 +86,11 @@ export async function invokeTeammate(params: InvokeTeammateParams): Promise<void
     teamsDir,
   });
 
-  // Override cfg.session.store to use teamsDir path
-  const modifiedCfg = {
-    ...cfg,
-    session: {
-      ...cfg.session,
-      store: storePath,
-    },
-  };
-
-  // Invoke the teammate agent with modified config
+  // Invoke the teammate agent with standard config (no session.store override)
+  // Sessions will be stored in ~/.openclaw/agents/{agentId}/sessions/
   await core.channel.reply.dispatchReplyFromConfig({
     ctx: ctxPayload,
-    cfg: modifiedCfg,
+    cfg,
     dispatcher,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     replyOptions: replyOptions as any,
