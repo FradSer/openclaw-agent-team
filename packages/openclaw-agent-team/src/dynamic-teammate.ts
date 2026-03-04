@@ -180,12 +180,31 @@ export async function maybeSpawnTeammate(params: {
   // Add teammate to ledger
   await ledger.addMember(teammate);
 
+  // Build agent config entry following OpenClaw multi-agent pattern
+  const agentEntry: {
+    id: string;
+    name: string;
+    workspace: string;
+    agentDir: string;
+    model?: string;
+  } = {
+    id: agentId,
+    name: teammateName,
+    workspace,
+    agentDir,
+  };
+
+  // Add model if specified
+  if (model !== undefined) {
+    agentEntry.model = model;
+  }
+
   // Update runtime config with new agent and binding
   const updatedCfg: OpenClawConfig = {
     ...cfg,
     agents: {
       ...cfg.agents,
-      list: [...(cfg.agents?.list ?? []), { id: agentId, workspace, agentDir }],
+      list: [...(cfg.agents?.list ?? []), agentEntry],
     },
     bindings: hasBinding
       ? existingBindings

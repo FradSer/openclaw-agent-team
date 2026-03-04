@@ -106,6 +106,44 @@ describe("dynamic-teammate module", () => {
 
         expect(mockConfig.agents?.list).toHaveLength(1);
         expect(mockConfig.agents?.list[0].id).toBe("teammate-config-team-coder");
+        expect(mockConfig.agents?.list[0].name).toBe("coder");
+      });
+
+      it("Then should include model in runtime config when specified", async () => {
+        await createActiveTeam("model-config-team");
+
+        await maybeSpawnTeammate({
+          teamsDir: tempDir,
+          teamName: "model-config-team",
+          teammateName: "ai-agent",
+          agentType: "Code",
+          model: "claude-opus-4-6",
+          maxTeammates: 10,
+          runtime: mockRuntime,
+          ledger,
+          log: (msg) => logs.push(msg),
+        });
+
+        expect(mockConfig.agents?.list).toHaveLength(1);
+        expect(mockConfig.agents?.list[0].id).toBe("teammate-model-config-team-ai-agent");
+        expect(mockConfig.agents?.list[0].model).toBe("claude-opus-4-6");
+      });
+
+      it("Then should not include model in runtime config when not specified", async () => {
+        await createActiveTeam("no-model-team");
+
+        await maybeSpawnTeammate({
+          teamsDir: tempDir,
+          teamName: "no-model-team",
+          teammateName: "default-agent",
+          maxTeammates: 10,
+          runtime: mockRuntime,
+          ledger,
+          log: (msg) => logs.push(msg),
+        });
+
+        expect(mockConfig.agents?.list).toHaveLength(1);
+        expect(mockConfig.agents?.list[0].model).toBeUndefined();
       });
 
       it("Then should add binding to runtime config", async () => {
