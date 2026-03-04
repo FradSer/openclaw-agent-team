@@ -10,6 +10,9 @@ const meta = {
   order: 100,
 };
 
+// Track running state to prevent health monitor from thinking the agent stopped
+let isAgentRunning = false;
+
 export const agentTeamChannelPlugin: ChannelPlugin = {
   id: "agent-team",
   meta: {
@@ -47,7 +50,7 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
   status: {
     defaultRuntime: {
       accountId: "default",
-      running: false,
+      running: isAgentRunning,
       lastStartAt: null,
       lastStopAt: null,
       lastError: null,
@@ -55,7 +58,7 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
     },
     buildChannelSummary: ({ snapshot }) => ({
       configured: snapshot.configured ?? true,
-      running: snapshot.running ?? true,
+      running: snapshot.running ?? isAgentRunning,
       lastStartAt: snapshot.lastStartAt ?? null,
       lastStopAt: snapshot.lastStopAt ?? null,
       lastError: snapshot.lastError ?? null,
@@ -67,9 +70,9 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
       enabled: account.enabled ?? true,
       configured: account.configured ?? true,
       name: account.name ?? "Agent Team",
-      running: true,
-      lastStartAt: null,
-      lastStopAt: null,
+      running: isAgentRunning,
+      lastStartAt: isAgentRunning ? Date.now() : null,
+      lastStopAt: !isAgentRunning ? Date.now() : null,
       lastError: null,
       port: null,
       probe: { ok: true },
@@ -78,8 +81,14 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
   gateway: {
     startAccount: async () => {
       // No external listener needed - invocation happens via invokeTeammate()
-      // Return stop function to signal successful start and prevent auto-restart loops
-      return { stop: () => {} };
+      // Set running state to prevent health monitor from thinking agent stopped
+      isAgentRunning = true;
+      // Return stop function that properly signals the agent has stopped
+      return {
+        stop: () => {
+          isAgentRunning = false;
+        },
+      };
     },
   },
   config: {
