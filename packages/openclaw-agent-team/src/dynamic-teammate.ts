@@ -51,7 +51,7 @@ export async function maybeSpawnTeammate(params: {
       created: false,
       error: {
         code: "INVALID_TEAMMATE_NAME",
-        message: `Teammate name "${teammateName}" contains invalid characters. Only letters, numbers, underscores, and hyphens are allowed.`,
+        message: `Teammate name "${teammateName}" is invalid. Use only lowercase letters and numbers (1-100 chars). Use sanitizeTeammateName() to convert input.`,
       },
     };
   }
@@ -93,8 +93,8 @@ export async function maybeSpawnTeammate(params: {
     };
   }
 
-  // Check for duplicate name in ledger
-  const duplicateName = currentMembers.find((m) => m.name === teammateName);
+  // Check for duplicate name in ledger (case-insensitive — agentId is always lowercase)
+  const duplicateName = currentMembers.find((m) => m.name.toLowerCase() === teammateName.toLowerCase());
   if (duplicateName) {
     return {
       created: false,

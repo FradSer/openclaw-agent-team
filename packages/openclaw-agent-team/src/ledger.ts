@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
-import { existsSync } from "node:fs";
 import type { Task, TeammateDefinition, TaskFilter } from "./types.js";
 
 interface CreateTaskInput {
@@ -61,7 +60,9 @@ async function readJsonlFile<T>(filePath: string): Promise<T[]> {
 async function writeJsonlFile<T>(filePath: string, records: T[]): Promise<void> {
   // Ensure directory exists
   const dir = dirname(filePath);
-  if (!existsSync(dir)) {
+  try {
+    await stat(dir);
+  } catch {
     await mkdir(dir, { recursive: true });
   }
 
@@ -196,8 +197,7 @@ export class TeamLedger {
 
   private checkCircularDependency(
     taskId: string,
-    blockedBy: string[],
-    subject?: string
+    blockedBy: string[]
   ): boolean {
     const visited = new Set<string>();
     const stack = [...blockedBy];
@@ -219,38 +219,6 @@ export class TeamLedger {
         }
         if (!visited.has(id)) {
           stack.push(id);
-        }
-      }
-    }
-
-    // Additional check for "Updated" subject pattern
-    if (subject && subject.includes(" Updated")) {
-      const originalSubject = subject.replace(" Updated", "");
-      const tasks = this.listTasksSync({ includeCompleted: true });
-      const originalTask = tasks.find((t) => t.subject === originalSubject);
-      if (originalTask) {
-        const originalVisited = new Set<string>();
-        const originalStack = [...blockedBy];
-
-        while (originalStack.length > 0) {
-          const current = originalStack.pop()!;
-          if (current === originalTask.id) {
-            return true;
-          }
-          if (originalVisited.has(current)) {
-            continue;
-          }
-          originalVisited.add(current);
-
-          const blockingIds = this.getBlockingTaskIds(current);
-          for (const id of blockingIds) {
-            if (id === originalTask.id) {
-              return true;
-            }
-            if (!originalVisited.has(id)) {
-              originalStack.push(id);
-            }
-          }
         }
       }
     }
@@ -300,7 +268,7 @@ export class TeamLedger {
         }
       }
 
-      if (this.checkCircularDependency(id, input.blockedBy, input.subject)) {
+      if (this.checkCircularDependency(id, input.blockedBy)) {
         throw new Error("Circular dependency detected");
       }
     }

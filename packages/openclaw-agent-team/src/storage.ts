@@ -4,8 +4,14 @@ import { homedir } from "node:os";
 import type { TeamConfig } from "./types.js";
 
 // Constants
-export const TEAM_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,50}$/;
-export const TEAMMATE_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,100}$/;
+// Team names: lowercase alphanumeric and hyphens only (no underscores, no uppercase).
+// This ensures filesystem paths, agent IDs, and binding peer IDs are consistent.
+export const TEAM_NAME_PATTERN = /^[a-z0-9-]{1,50}$/;
+// Teammate names: lowercase alphanumeric and hyphens only.
+// Hyphens are NOT allowed because parseTeammateAgentId uses lastIndexOf("-") to split
+// the agentId format "teammate-{teamName}-{teammateName}". Use sanitizeTeammateName()
+// to convert user input before validating.
+export const TEAMMATE_NAME_PATTERN = /^[a-z0-9]{1,100}$/;
 
 // Default teams directory
 const DEFAULT_TEAMS_DIR = () => join(homedir(), ".openclaw", "teams");
@@ -19,13 +25,29 @@ export function validateTeamName(name: string): boolean {
 }
 
 /**
+ * Sanitizes a team name: lowercases and replaces any character that isn't
+ * a-z, 0-9, or hyphen with a hyphen. Use this before validateTeamName()
+ * when processing user input.
+ */
+export function sanitizeTeamName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 50);
+}
+
+/**
  * Sanitizes a teammate name for use in file paths.
  * Converts to lowercase, replaces invalid characters with hyphens, and truncates to 100 characters.
  */
 export function sanitizeTeammateName(name: string): string {
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, "-")
+    .replace(/[^a-z0-9]/g, "-")  // replace hyphens too — they break parseTeammateAgentId
+    .replace(/-+/g, "-")         // collapse consecutive hyphens
+    .replace(/^-|-$/g, "")       // strip leading/trailing hyphens
     .slice(0, 100);
 }
 
@@ -39,7 +61,7 @@ export async function createTeamDirectory(
 ): Promise<void> {
   if (!validateTeamName(teamName)) {
     throw new Error(
-      `Invalid team name "${teamName}". Must be 1-50 characters and contain only letters, numbers, underscores, and hyphens.`
+      `Invalid team name "${teamName}". Must be 1-50 characters and contain only lowercase letters, numbers, and hyphens.`
     );
   }
 
@@ -86,7 +108,7 @@ export async function deleteTeamDirectory(
 ): Promise<void> {
   if (!validateTeamName(teamName)) {
     throw new Error(
-      `Invalid team name "${teamName}". Must be 1-50 characters and contain only letters, numbers, underscores, and hyphens.`
+      `Invalid team name "${teamName}". Must be 1-50 characters and contain only lowercase letters, numbers, and hyphens.`
     );
   }
 

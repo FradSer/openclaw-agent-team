@@ -1,6 +1,6 @@
 import type { ChannelPlugin, ChannelOutboundContext } from "openclaw/plugin-sdk";
 import { mkdir, appendFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 
@@ -28,15 +28,23 @@ function resolveTeamsDir(cfg: unknown): string {
   );
 }
 
+// Lowercase alphanumeric and hyphens only — matches TEAM_NAME_PATTERN / TEAMMATE_NAME_PATTERN
+const SAFE_NAME_RE = /^[a-z0-9-]+$/;
+
 /**
  * Validates and normalizes a "teamName:teammateName" target.
  * Returns [teamName, teammateName] (both lowercased) or null if invalid.
+ * Both parts must consist of lowercase alphanumeric characters and hyphens only,
+ * preventing path traversal via ".." or "/" in the inbox directory path.
  */
 function parseTarget(target: string): [string, string] | null {
   if (!target) return null;
   const parts = target.split(":");
   if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
-  return [parts[0].toLowerCase(), parts[1].toLowerCase()];
+  const teamName = parts[0].toLowerCase();
+  const teammateName = parts[1].toLowerCase();
+  if (!SAFE_NAME_RE.test(teamName) || !SAFE_NAME_RE.test(teammateName)) return null;
+  return [teamName, teammateName];
 }
 
 async function writeInboxMessage(
@@ -44,9 +52,19 @@ async function writeInboxMessage(
   payload: Record<string, unknown>,
   cfg: unknown
 ): Promise<OutboundDeliveryResult> {
-  const [teamName, teammateName] = to.split(":");
+  const parsed = parseTarget(to);
+  if (!parsed) {
+    throw new Error(`Invalid target format: ${to}. Expected "teamName:teammateName"`);
+  }
+  const [teamName, teammateName] = parsed;
   const teamsDir = resolveTeamsDir(cfg);
-  const inboxDir = join(teamsDir, teamName, "inbox", teammateName);
+
+  // Path traversal protection: ensure inbox path stays within teamsDir
+  const normalizedTeamsDir = resolve(teamsDir);
+  const inboxDir = resolve(normalizedTeamsDir, teamName, "inbox", teammateName);
+  if (!inboxDir.startsWith(normalizedTeamsDir + sep)) {
+    throw new Error(`Path traversal detected for target: ${to}`);
+  }
   const inboxPath = join(inboxDir, "messages.jsonl");
 
   await mkdir(inboxDir, { recursive: true });
