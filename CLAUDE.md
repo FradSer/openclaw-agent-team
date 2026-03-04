@@ -6,44 +6,74 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a pnpm monorepo for `@fradser/openclaw-agent-team`, an OpenClaw plugin enabling multi-agent team coordination with a shared task ledger and inter-agent messaging.
 
+**Package**: `@fradser/openclaw-agent-team` v1.0.0
+**Author**: Frad LEE <fradser@gmail.com>
+**License**: MIT
+**Peer dependency**: `openclaw >=1.0.0`
+
 ## Commands
+
+Run all commands from the repository root unless noted otherwise.
 
 ```bash
 # Install dependencies
 pnpm install
 
-# Build (runs tsc and copies plugin manifest)
+# Build (compiles TypeScript and copies plugin manifest to dist/)
 pnpm build
 
-# Run all tests
+# Run all tests (once)
 pnpm test
 
 # Run tests in watch mode
 pnpm test:watch
 
-# Run a single test file
+# Run a single test file (from packages/openclaw-agent-team/)
 pnpm vitest run tests/ledger.test.ts
 
 # Lint
 pnpm lint
 ```
 
+## Repository Structure
+
+```
+openclaw-agent-team/
+├── package.json                  # Monorepo root (pnpm workspace)
+├── pnpm-workspace.yaml           # Workspace config: packages/*
+├── CLAUDE.md                     # This file
+├── docs/
+│   └── plans/                    # Design and planning documents
+└── packages/
+    └── openclaw-agent-team/      # Main plugin package
+        ├── package.json
+        ├── tsconfig.json
+        ├── vitest.config.ts
+        ├── openclaw.plugin.json  # Plugin manifest (copied to dist/ on build)
+        ├── index.ts              # Re-exports from src/index.ts
+        ├── src/                  # Source files
+        └── tests/                # Test files
+```
+
 ## Architecture
 
-The plugin follows a 4-layer architecture with dependencies pointing inward:
+The plugin follows a 4-layer architecture with dependencies pointing strictly inward:
 
 ```mermaid
 graph TB
     subgraph Tools["Tools Layer"]
         TeamCreate[team-create.ts]
-        TaskCreate[task-create.ts]
-        SendMessage[send-message.ts]
+        TeamShutdown[team-shutdown.ts]
+        TeammateSpawn[teammate-spawn.ts]
     end
 
     subgraph Core["Core Layer"]
+        Index[index.ts]
         Ledger[ledger.ts]
-        Mailbox[mailbox.ts]
+        Channel[channel.ts]
         Runtime[runtime.ts]
+        ContextInjection[context-injection.ts]
+        DynamicTeammate[dynamic-teammate.ts]
     end
 
     subgraph Storage["Storage Layer"]
@@ -59,70 +89,208 @@ graph TB
     Storage --> Foundation
 ```
 
-### Key Modules
+### Source Modules
 
-- **`src/index.ts`** - Plugin entry point; registers 9 agent tools and the `before_prompt_build` hook
-- **`src/types.ts`** - TypeBox schema definitions for `TeamConfig`, `Task`, `TeamMessage`, etc.
-- **`src/ledger.ts`** - JSONL-based task/member/dependency persistence with in-memory caches
-- **`src/mailbox.ts`** - Inter-agent messaging via per-recipient JSONL inbox files
-- **`src/storage.ts`** - Team directory management under `~/.openclaw/teams/`
-- **`src/runtime.ts`** - PluginRuntime singleton access
-- **`src/context-injection.ts`** - Hook that injects pending messages into agent context
+#### `src/index.ts` — Plugin Entry Point
+Registers the plugin with OpenClaw. Responsibilities:
+- Exports `PLUGIN_ID`, `PLUGIN_NAME`, `PLUGIN_DESCRIPTION` constants
+- Registers 3 agent tools: `team_create`, `team_shutdown`, `teammate_spawn`
+- Registers the `agent-team` channel plugin for inter-agent messaging
+- Registers the `before_prompt_build` hook for teammate context injection
+- Calls `syncTeammatesToConfig()` on startup to repair missing agent bindings
 
-### Data Storage
+#### `src/types.ts` — TypeBox Schema Definitions
+All types are defined using TypeBox for runtime validation. Key types:
+- **`TeamConfig`** — Team metadata: `id`, `team_name`, `description`, `agent_type`, `lead`, `metadata` (createdAt, updatedAt, status)
+- **`TeammateDefinition`** — Teammate record: `name`, `agentId`, `sessionKey`, `agentType`, optional `model`/`tools`, `status` (`idle`/`working`/`error`/`shutdown`), `joinedAt`
+- **`Task`** — Task record: `id`, `subject`, `description`, optional `activeForm`, `status` (`pending`/`in_progress`/`completed`/`failed`/`blocked`), optional `owner`/`blockedBy`/timestamps
+- **`TaskFilter`** — Query options: `status`, `owner`, `includeCompleted`
+- **`AgentTeamConfig`** — Plugin configuration: `maxTeammatesPerTeam`, `defaultAgentType`, optional `teamsDir`, `pathTemplates`
 
-Teams are stored in `~/.openclaw/teams/{team-name}/`:
+Helper functions: `buildTeammateAgentId()`, `parseTeammateAgentId()`
+Constants: `TEAMMATE_AGENT_ID_PREFIX`, `AGENT_TEAM_CHANNEL`, `DEFAULT_WORKSPACE_TEMPLATE`, `DEFAULT_AGENT_DIR_TEMPLATE`
+Validation: `validateTeamConfig()`, `validateTeammateDefinition()`, `validateTask()`, `validateAgentTeamConfig()`
 
-```
-{team-name}/
-├── config.json         # Team configuration
-├── tasks.jsonl         # Task records (one JSON object per line)
-├── members.jsonl       # Team member records
-├── dependencies.jsonl  # Task dependency records
-├── inbox/
-│   └── {sessionKey}/messages.jsonl
-└── agents/{teammateName}/
-```
+#### `src/ledger.ts` — JSONL Task and Member Persistence
+`TeamLedger` class using JSONL files with in-memory caches. Lazy-loads on first access.
 
-### Agent Tools
+JSONL files (in team directory):
+- `tasks.jsonl` — Task records
+- `members.jsonl` — Teammate member records
+- `dependencies.jsonl` — Task dependency edges
 
-The plugin registers 9 tools with OpenClaw:
+Task methods: `createTask()`, `getTask()`, `listTasks()`, `updateTaskStatus()`, `deleteTask()`, `getBlockingTasks()`, `getDependentTasks()`, `isTaskBlocked()`
+Member methods: `addMember()`, `listMembers()`, `updateMemberStatus()`, `removeMember()`
+Validation: `checkCircularDependency()` — prevents dependency cycles
+
+#### `src/storage.ts` — File System Operations
+Manages team directories under `~/.openclaw/teams/` (or custom `teamsDir`).
+
+Exports:
+- `TEAM_NAME_PATTERN`, `TEAMMATE_NAME_PATTERN` — validation regexes
+- `validateTeamName()`, `sanitizeTeammateName()` — name sanitization
+- `createTeamDirectory()`, `teamDirectoryExists()`, `deleteTeamDirectory()` — directory lifecycle
+- `writeTeamConfig()`, `readTeamConfig()` — JSON config I/O
+- `resolveTeammatePaths()`, `resolveTeamPath()`, `getTeamsBaseDir()` — path helpers
+- `resolveTemplatePath()` — template-based path resolution
+
+#### `src/channel.ts` — Inter-Agent Messaging Channel
+Implements the OpenClaw `ChannelPlugin` interface as the `agent-team` channel.
+
+- Target format: `"teamName:teammateName"` (resolved via `normalizeTarget`)
+- Messages written as JSONL to: `{teamsDir}/{teamName}/inbox/{teammateName}/messages.jsonl`
+- Capabilities: direct messaging, reply; no polls/threads/media/reactions/edit
+- Single hardcoded `"default"` account, always enabled
+
+#### `src/runtime.ts` — Runtime Singleton
+Minimal module exposing `setAgentTeamRuntime()`, `getAgentTeamRuntime()`, `resetAgentTeamRuntime()` for accessing the OpenClaw `PluginRuntime` instance.
+
+#### `src/context-injection.ts` — Teammate Context Hook
+`createTeammateContextHook()` returns an async hook for the `before_prompt_build` event.
+- Only activates for agents with `TEAMMATE_AGENT_ID_PREFIX`
+- Builds a markdown context block including team info, teammate role, active member list, and communication instructions
+
+#### `src/dynamic-teammate.ts` — Teammate Spawning Logic
+`maybeSpawnTeammate()` handles the full lifecycle of creating a new teammate:
+1. Validates teammate name format
+2. Checks team is active, not at capacity, no duplicates
+3. Creates workspace/agentDir directories
+4. Generates `sessionKey`: `agent:{agentId}:main`
+5. Adds to ledger and runtime config with bindings
+
+`repairTeammateBinding()` — Adds missing OpenClaw bindings for already-existing agents.
+
+### Tools Layer (`src/tools/`)
+
+#### `team-create.ts`
+Input schema: `team_name` (1–50 chars, alphanumeric/hyphens), optional `description`, optional `agent_type`.
+Creates team directory, writes `config.json` with a generated UUID, returns `{teamId, teamName, status}`.
+Error codes: `DUPLICATE_TEAM_NAME`, `INVALID_TEAM_NAME`, `TEAM_NAME_TOO_LONG`, `EMPTY_TEAM_NAME`
+
+#### `team-shutdown.ts`
+Input schema: `team_name`, optional `reason`.
+Shuts down all teammates (updates ledger statuses to `"shutdown"`), removes agents/bindings from runtime config, updates team `config.json` status to `"shutdown"`, then **deletes the entire team directory**.
+Error codes: `TEAM_NOT_FOUND`, `TEAM_ALREADY_SHUTDOWN`
+
+#### `teammate-spawn.ts`
+Input schema: `team_name`, `name`, optional `agent_type`/`model`/`tools` (allow/deny lists).
+Uses a per-team mutex (`withTeamLock`) to serialize concurrent spawns. Delegates to `maybeSpawnTeammate()`.
+Error codes: `TEAM_NOT_FOUND`, `TEAM_NOT_ACTIVE`, `TEAM_AT_CAPACITY`, `DUPLICATE_TEAMMATE_NAME`, `INVALID_TEAMMATE_NAME`
+
+### Registered Agent Tools
+
+The plugin registers exactly **3 tools** with OpenClaw:
 
 | Tool | Purpose |
 |------|---------|
-| `team_create` | Create a new team with config |
-| `team_shutdown` | Gracefully shutdown team |
-| `teammate_spawn` | Spawn a new agent teammate |
-| `task_create` | Create task with optional dependencies |
-| `task_list` | List tasks with filters |
-| `task_claim` | Claim an available task |
-| `task_complete` | Mark task as completed |
-| `send_message` | Direct message or broadcast |
-| `inbox` | Read pending messages |
+| `team_create` | Create a new team |
+| `team_shutdown` | Gracefully shut down a team and delete its data |
+| `teammate_spawn` | Spawn a new agent teammate in a team |
+
+### Data Storage Layout
+
+Teams are stored in `~/.openclaw/teams/{team-name}/` (or the configured `teamsDir`):
+
+```
+{team-name}/
+├── config.json                        # TeamConfig JSON
+├── tasks.jsonl                        # Task records (one JSON per line)
+├── members.jsonl                      # Teammate member records
+├── dependencies.jsonl                 # Task dependency edges
+├── agents/
+│   └── {teammateName}/               # Teammate workspace directory
+│       ├── workspace/                 # Agent working directory
+│       └── agent/                     # Agent directory
+└── inbox/
+    └── {teammateName}/
+        └── messages.jsonl             # Inbound messages for teammate
+```
+
+## Testing
+
+- **Framework**: Vitest 3.x with Node environment
+- **Location**: `packages/openclaw-agent-team/tests/`
+- **Sequential execution**: `fileParallelism: false` to avoid temp directory conflicts
+- **Timeout**: 10 seconds for tests and hooks
+- **Mock**: `tests/__mocks__/heartbeat-wake.ts` stubs OpenClaw's internal heartbeat module
+
+### Test Files
+
+| File | Covers |
+|------|--------|
+| `setup.test.ts` | Plugin exports and package.json structure |
+| `types.test.ts` | TypeBox schema validation for all types |
+| `storage.test.ts` | Directory operations, name validation, config I/O |
+| `ledger.test.ts` | Task CRUD, member ops, dependency/circular detection, persistence |
+| `index.test.ts` | Plugin registration, tool count, hooks, manifest |
+| `dynamic-teammate.test.ts` | Teammate spawning, capacity, duplicates, binding repair |
+| `tools/team-create.test.ts` | Team creation, validation errors, directory structure |
+| `tools/team-shutdown.test.ts` | Shutdown behavior, directory deletion, config cleanup |
+| `tools/teammate-spawn.test.ts` | Spawn tool, agent ID format, tool restrictions |
+| `storage/delete-team-directory.test.ts` | Recursive deletion, path traversal protection |
+| `integration/teams-dir.test.ts` | Custom vs default teamsDir configuration |
+
+## TypeScript Configuration
+
+- **Target**: ES2022, **Module**: NodeNext
+- **Strict mode** enabled with additional checks:
+  - `noUnusedLocals`, `noUnusedParameters`
+  - `noImplicitReturns`, `noFallthroughCasesInSwitch`
+  - `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`
+  - `noPropertyAccessFromIndexSignature`
+- Source: `src/`, Output: `dist/`, excludes `tests/`
 
 ## Conventions
 
-### Commit Scopes
+### Commit Format
 
-`plugin`, `team`, `task`, `agent`, `msg`, `coord`, `config`, `deps`, `ci`, `docs`
+`<type>(<scope>): <description>`
 
-### Commit Types
+**Types**: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `style`
 
-`feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `style`
+**Scopes**: `plugin`, `team`, `task`, `agent`, `msg`, `coord`, `config`, `deps`, `ci`, `docs`
 
 ### Branch Prefixes
 
 `feature/*`, `fix/*`, `hotfix/*`, `refactor/*`, `docs/*`
 
-## Testing
+### Naming Patterns
 
-- Tests use Vitest with Node environment
-- Test files are in `tests/**/*.test.ts`
-- Tests run sequentially (`fileParallelism: false`) to avoid temp directory conflicts
-- Follow BDD Given/When/Then scenarios stored in `.feature` files
+- **Team names**: lowercase alphanumeric and hyphens, 1–50 chars (`/^[a-z0-9-]+$/`)
+- **Teammate names**: lowercase alphanumeric and hyphens (`/^[a-z0-9-]+$/`); `sanitizeTeammateName()` auto-converts uppercase and replaces invalid chars
+- **Agent IDs**: `teammate:{teamName}:{teammateName}` (always lowercase)
+- **Session keys**: `agent:{agentId}:main`
+
+### Error Codes
+
+Tools return structured errors with a `code` field:
+
+| Code | Meaning |
+|------|---------|
+| `DUPLICATE_TEAM_NAME` | Team with that name already exists |
+| `INVALID_TEAM_NAME` | Name fails regex or length validation |
+| `TEAM_NAME_TOO_LONG` | Name exceeds 50 characters |
+| `EMPTY_TEAM_NAME` | Name is empty |
+| `TEAM_NOT_FOUND` | No team with the given name |
+| `TEAM_ALREADY_SHUTDOWN` | Team is already in shutdown state |
+| `TEAM_NOT_ACTIVE` | Team exists but is not active |
+| `TEAM_AT_CAPACITY` | Team has reached `maxTeammatesPerTeam` |
+| `DUPLICATE_TEAMMATE_NAME` | Teammate with that name already exists |
+| `INVALID_TEAMMATE_NAME` | Name fails regex validation |
 
 ## Plugin Development
 
-This plugin targets `openclaw >=1.0.0` as a peer dependency. The plugin manifest (`openclaw.plugin.json`) defines the config schema including `maxTeammatesPerTeam`, `defaultAgentType`, and `teamsDir`.
+The plugin manifest (`openclaw.plugin.json`) is copied to `dist/` during build. It defines:
+
+```json
+{
+  "id": "openclaw-agent-team",
+  "configSchema": {
+    "maxTeammatesPerTeam": { "type": "number", "default": 10, "min": 1, "max": 50 },
+    "defaultAgentType": { "type": "string", "default": "general-purpose" },
+    "teamsDir": { "type": "string" }
+  }
+}
+```
 
 For OpenClaw plugin API details, see `docs/plugin.md`.
