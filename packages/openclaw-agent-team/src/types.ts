@@ -8,6 +8,8 @@ export const AGENT_TEAM_CHANNEL = "agent-team";
 /**
  * Builds a teammate agent ID from team name and teammate name.
  * Format: teammate-{teamName}-{teammateName} (all lowercase for consistency)
+ * Note: teammate names must not contain hyphens, since the last hyphen is used
+ * as the delimiter when parsing. Team names may contain hyphens.
  */
 export function buildTeammateAgentId(teamName: string, teammateName: string): string {
   return `${TEAMMATE_AGENT_ID_PREFIX}${teamName.toLowerCase()}-${teammateName.toLowerCase()}`;
@@ -23,14 +25,15 @@ export function parseTeammateAgentId(agentId: string): { teamName: string; teamm
   }
 
   const suffix = agentId.slice(TEAMMATE_AGENT_ID_PREFIX.length);
-  const firstHyphenIndex = suffix.indexOf("-");
+  // Split on LAST hyphen to handle team names with hyphens (e.g., "chat-team")
+  const lastHyphenIndex = suffix.lastIndexOf("-");
 
-  if (firstHyphenIndex === -1) {
+  if (lastHyphenIndex === -1) {
     return null;
   }
 
-  const teamName = suffix.slice(0, firstHyphenIndex);
-  const teammateName = suffix.slice(firstHyphenIndex + 1);
+  const teamName = suffix.slice(0, lastHyphenIndex);
+  const teammateName = suffix.slice(lastHyphenIndex + 1);
 
   if (!teamName || !teammateName) {
     return null;

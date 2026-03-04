@@ -168,10 +168,12 @@ describe("Plugin Entry Point", () => {
     });
 
     describe("When registering hooks", () => {
-      // No hooks are currently registered
-      it("Then should not register any hooks", () => {
+      it("Then should register before_prompt_build hook", () => {
         plugin.register(mockApi);
-        expect(mockApi.on).not.toHaveBeenCalled();
+        expect(mockApi.on).toHaveBeenCalledWith(
+          "before_prompt_build",
+          expect.any(Function)
+        );
       });
     });
 

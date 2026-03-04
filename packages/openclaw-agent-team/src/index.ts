@@ -11,6 +11,7 @@ import { TeamLedger } from "./ledger.js";
 import { teamDirectoryExists, resolveTeammatePaths } from "./storage.js";
 import { setAgentTeamRuntime } from "./runtime.js";
 import { agentTeamChannelPlugin } from "./channel.js";
+import { createTeammateContextHook } from "./context-injection.js";
 
 // Plugin constants
 export const PLUGIN_ID = "openclaw-agent-team";
@@ -330,6 +331,10 @@ const agentTeamPlugin = {
 
     // Register all tools
     registerTeamTools(api, ctx);
+
+    // Register before_prompt_build hook for teammate context injection
+    const teammateContextHook = createTeammateContextHook(ctx.teamsDir, (msg) => api.logger.error(msg));
+    api.on("before_prompt_build", teammateContextHook);
 
     api.logger.info("[agent-team] Plugin registered successfully");
   },
