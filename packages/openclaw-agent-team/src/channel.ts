@@ -92,9 +92,6 @@ const meta = {
   order: 100,
 };
 
-// Track running state to prevent health monitor from thinking the agent stopped
-let isAgentRunning = false;
-
 export const agentTeamChannelPlugin: ChannelPlugin = {
   id: "agent-team",
   meta: {
@@ -140,7 +137,7 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
   status: {
     defaultRuntime: {
       accountId: "default",
-      running: isAgentRunning,
+      running: false,
       lastStartAt: null,
       lastStopAt: null,
       lastError: null,
@@ -148,7 +145,7 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
     },
     buildChannelSummary: ({ snapshot }) => ({
       configured: snapshot.configured ?? true,
-      running: snapshot.running ?? isAgentRunning,
+      running: snapshot.running ?? false,
       lastStartAt: snapshot.lastStartAt ?? null,
       lastStopAt: snapshot.lastStopAt ?? null,
       lastError: snapshot.lastError ?? null,
@@ -160,25 +157,37 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
       enabled: account.enabled ?? true,
       configured: account.configured ?? true,
       name: account.name ?? "Agent Team",
-      running: isAgentRunning,
-      lastStartAt: isAgentRunning ? Date.now() : null,
-      lastStopAt: !isAgentRunning ? Date.now() : null,
+      running: account.running ?? false,
+      lastStartAt: account.lastStartAt ?? null,
+      lastStopAt: account.lastStopAt ?? null,
       lastError: null,
       port: null,
       probe: { ok: true },
     }),
   },
   gateway: {
-    startAccount: async () => {
-      // No external listener needed - invocation happens via invokeTeammate()
-      // Set running state to prevent health monitor from thinking agent stopped
-      isAgentRunning = true;
-      // Return stop function that properly signals the agent has stopped
-      return {
-        stop: () => {
-          isAgentRunning = false;
-        },
-      };
+    startAccount: async (ctx) => {
+      ctx.setStatus({
+        accountId: "default",
+        running: true,
+        lastStartAt: Date.now(),
+      });
+
+      // No external listener needed - agent-team uses JSONL file-based messaging
+      // Just wait for shutdown signal
+      await new Promise<void>((resolve) => {
+        if (ctx.abortSignal.aborted) {
+          resolve();
+          return;
+        }
+        ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+      });
+
+      ctx.setStatus({
+        accountId: "default",
+        running: false,
+        lastStopAt: Date.now(),
+      });
     },
   },
   config: {
@@ -206,6 +215,9 @@ export const agentTeamChannelPlugin: ChannelPlugin = {
     deliveryMode: "direct" as const,
 
     resolveTarget: ({ to }) => {
+      if (!to) {
+        return { ok: false, error: new Error("Target is required") };
+      }
       const parsed = parseTarget(to);
       if (!parsed) {
         return {

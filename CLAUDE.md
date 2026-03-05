@@ -142,6 +142,13 @@ Implements the OpenClaw `ChannelPlugin` interface as the `agent-team` channel.
 - Capabilities: direct messaging, reply; no polls/threads/media/reactions/edit
 - Single hardcoded `"default"` account, always enabled
 
+**Outbound messaging:**
+- `resolveTarget()` — validates target format and returns normalized target
+- `sendText()` — sends text messages to teammate inbox
+- `sendMedia()` — sends media messages with URL to teammate inbox
+- All messages include: `id` (UUID), `to`, `timestamp`, `type`, `content`, optional `mediaUrl`
+- Path traversal protection via `SAFE_NAME_RE` validation and `resolve()` checks
+
 #### `src/runtime.ts` — Runtime Singleton
 Minimal module exposing `setAgentTeamRuntime()`, `getAgentTeamRuntime()`, `resetAgentTeamRuntime()` for accessing the OpenClaw `PluginRuntime` instance.
 
