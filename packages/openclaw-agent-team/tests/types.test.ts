@@ -2,13 +2,11 @@ import { describe, it, expect } from "vitest";
 import type {
   TeamConfig,
   TeammateDefinition,
-  Task,
   AgentTeamConfig,
 } from "../src/types.js";
 import {
   validateTeamConfig,
   validateTeammateDefinition,
-  validateTask,
   validateAgentTeamConfig,
 } from "../src/types.js";
 
@@ -112,60 +110,6 @@ describe("Type Definitions", () => {
       };
 
       expect(validateTeammateDefinition(invalidTeammate)).toBe(false);
-    });
-  });
-
-  describe("Task", () => {
-    it("should have required fields", () => {
-      const task: Task = {
-        id: "task-123",
-        subject: "Implement feature",
-        description: "Implement the new feature",
-        status: "pending",
-        blockedBy: [],
-        createdAt: Date.now(),
-      };
-
-      expect(task.id).toBeDefined();
-      expect(task.subject).toBeDefined();
-      expect(task.status).toBeOneOf([
-        "pending",
-        "in_progress",
-        "completed",
-        "failed",
-        "blocked",
-      ]);
-      expect(task.blockedBy).toBeDefined();
-      expect(task.createdAt).toBeDefined();
-    });
-
-    it("should validate with TypeBox schema", () => {
-      const validTask = {
-        id: "task-123",
-        subject: "Implement feature",
-        description: "Implement the new feature",
-        status: "pending",
-        blockedBy: [],
-        createdAt: Date.now(),
-      };
-
-      expect(validateTask(validTask)).toBe(true);
-    });
-
-    it("should allow optional fields", () => {
-      const taskWithOptional: Task = {
-        id: "task-123",
-        subject: "Implement feature",
-        description: "Implement the new feature",
-        activeForm: "Implementing feature",
-        status: "in_progress",
-        owner: "researcher",
-        blockedBy: ["task-456"],
-        createdAt: Date.now(),
-        claimedAt: Date.now(),
-      };
-
-      expect(validateTask(taskWithOptional)).toBe(true);
     });
   });
 

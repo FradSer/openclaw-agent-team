@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a pnpm monorepo for `@fradser/openclaw-agent-team`, an OpenClaw plugin enabling multi-agent team coordination with a shared task ledger and inter-agent messaging.
+This is a pnpm monorepo for `@fradser/openclaw-agent-team`, an OpenClaw plugin enabling multi-agent team coordination with inter-agent messaging.
 
 **Package**: `@fradser/openclaw-agent-team` v1.0.0
 **Author**: Frad LEE <fradser@gmail.com>
@@ -103,25 +103,19 @@ Registers the plugin with OpenClaw. Responsibilities:
 All types are defined using TypeBox for runtime validation. Key types:
 - **`TeamConfig`** — Team metadata: `id`, `team_name`, `description`, `agent_type`, `lead`, `metadata` (createdAt, updatedAt, status)
 - **`TeammateDefinition`** — Teammate record: `name`, `agentId`, `sessionKey`, `agentType`, optional `model`/`tools`, `status` (`idle`/`working`/`error`/`shutdown`), `joinedAt`
-- **`Task`** — Task record: `id`, `subject`, `description`, optional `activeForm`, `status` (`pending`/`in_progress`/`completed`/`failed`/`blocked`), optional `owner`/`blockedBy`/timestamps
-- **`TaskFilter`** — Query options: `status`, `owner`, `includeCompleted`
 - **`AgentTeamConfig`** — Plugin configuration: `maxTeammatesPerTeam`, `defaultAgentType`, optional `teamsDir`, `pathTemplates`
 
 Helper functions: `buildTeammateAgentId()`, `parseTeammateAgentId()`
 Constants: `TEAMMATE_AGENT_ID_PREFIX`, `AGENT_TEAM_CHANNEL`, `DEFAULT_WORKSPACE_TEMPLATE`, `DEFAULT_AGENT_DIR_TEMPLATE`
-Validation: `validateTeamConfig()`, `validateTeammateDefinition()`, `validateTask()`, `validateAgentTeamConfig()`
+Validation: `validateTeamConfig()`, `validateTeammateDefinition()`, `validateAgentTeamConfig()`
 
-#### `src/ledger.ts` — JSONL Task and Member Persistence
+#### `src/ledger.ts` — JSONL Member Persistence
 `TeamLedger` class using JSONL files with in-memory caches. Lazy-loads on first access.
 
 JSONL files (in team directory):
-- `tasks.jsonl` — Task records
 - `members.jsonl` — Teammate member records
-- `dependencies.jsonl` — Task dependency edges
 
-Task methods: `createTask()`, `getTask()`, `listTasks()`, `updateTaskStatus()`, `deleteTask()`, `getBlockingTasks()`, `getDependentTasks()`, `isTaskBlocked()`
 Member methods: `addMember()`, `listMembers()`, `updateMemberStatus()`, `removeMember()`
-Validation: `checkCircularDependency()` — prevents dependency cycles
 
 #### `src/storage.ts` — File System Operations
 Manages team directories under `~/.openclaw/teams/` (or custom `teamsDir`).
@@ -201,9 +195,7 @@ Teams are stored in `~/.openclaw/teams/{team-name}/` (or the configured `teamsDi
 ```
 {team-name}/
 ├── config.json                        # TeamConfig JSON
-├── tasks.jsonl                        # Task records (one JSON per line)
 ├── members.jsonl                      # Teammate member records
-├── dependencies.jsonl                 # Task dependency edges
 ├── agents/
 │   └── {teammateName}/               # Teammate workspace directory
 │       ├── workspace/                 # Agent working directory
@@ -228,7 +220,7 @@ Teams are stored in `~/.openclaw/teams/{team-name}/` (or the configured `teamsDi
 | `setup.test.ts` | Plugin exports and package.json structure |
 | `types.test.ts` | TypeBox schema validation for all types |
 | `storage.test.ts` | Directory operations, name validation, config I/O |
-| `ledger.test.ts` | Task CRUD, member ops, dependency/circular detection, persistence |
+| `ledger.test.ts` | Member operations, persistence |
 | `index.test.ts` | Plugin registration, tool count, hooks, manifest |
 | `dynamic-teammate.test.ts` | Teammate spawning, capacity, duplicates, binding repair |
 | `tools/team-create.test.ts` | Team creation, validation errors, directory structure |

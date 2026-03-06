@@ -16,7 +16,7 @@ import { createTeammateContextHook } from "./context-injection.js";
 // Plugin constants
 export const PLUGIN_ID = "openclaw-agent-team";
 export const PLUGIN_NAME = "Agent Team";
-export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with shared task ledger";
+export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with messaging";
 
 // OpenClaw Plugin API types (matching clawdbot-feishu pattern)
 interface OpenClawPluginApi {

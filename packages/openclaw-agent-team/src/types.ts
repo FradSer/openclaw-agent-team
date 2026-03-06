@@ -86,33 +86,6 @@ export const TeammateDefinitionSchema = Type.Object({
 
 export type TeammateDefinition = Static<typeof TeammateDefinitionSchema>;
 
-// Task
-
-export const TaskStatusSchema = Type.Union([
-  Type.Literal("pending"),
-  Type.Literal("in_progress"),
-  Type.Literal("completed"),
-  Type.Literal("failed"),
-  Type.Literal("blocked"),
-]);
-
-export type TaskStatus = Static<typeof TaskStatusSchema>;
-
-export const TaskSchema = Type.Object({
-  id: Type.String(),
-  subject: Type.String({ minLength: 1 }),
-  description: Type.String(),
-  activeForm: Type.Optional(Type.String()),
-  status: TaskStatusSchema,
-  owner: Type.Optional(Type.String()),
-  blockedBy: Type.Array(Type.String()),
-  createdAt: Type.Number(),
-  claimedAt: Type.Optional(Type.Number()),
-  completedAt: Type.Optional(Type.Number()),
-});
-
-export type Task = Static<typeof TaskSchema>;
-
 // Plugin Configuration
 
 export const TeammatePathTemplatesSchema = Type.Object({
@@ -135,16 +108,6 @@ export type AgentTeamConfig = Static<typeof AgentTeamConfigSchema>;
 export const DEFAULT_WORKSPACE_TEMPLATE = "{teamsDir}/{teamName}/agents/{teammateName}/workspace";
 export const DEFAULT_AGENT_DIR_TEMPLATE = "{teamsDir}/{teamName}/agents/{teammateName}/agent";
 
-// Task Filter for listing
-
-export const TaskFilterSchema = Type.Object({
-  status: Type.Optional(TaskStatusSchema),
-  owner: Type.Optional(Type.String()),
-  includeCompleted: Type.Optional(Type.Boolean()),
-});
-
-export type TaskFilter = Static<typeof TaskFilterSchema>;
-
 // Validation helper functions
 
 export function validateTeamConfig(value: unknown): boolean {
@@ -153,10 +116,6 @@ export function validateTeamConfig(value: unknown): boolean {
 
 export function validateTeammateDefinition(value: unknown): boolean {
   return Value.Check(TeammateDefinitionSchema, value);
-}
-
-export function validateTask(value: unknown): boolean {
-  return Value.Check(TaskSchema, value);
 }
 
 export function validateAgentTeamConfig(value: unknown): boolean {
