@@ -4,14 +4,10 @@ import { homedir } from "node:os";
 import type { TeamConfig } from "./types.js";
 
 // Constants
-// Team names: lowercase alphanumeric and hyphens only (no underscores, no uppercase).
-// This ensures filesystem paths, agent IDs, and binding peer IDs are consistent.
-export const TEAM_NAME_PATTERN = /^[a-z0-9-]{1,50}$/;
-// Teammate names: lowercase alphanumeric and hyphens only.
-// Hyphens are NOT allowed because parseTeammateAgentId uses lastIndexOf("-") to split
-// the agentId format "teammate-{teamName}-{teammateName}". Use sanitizeTeammateName()
-// to convert user input before validating.
-export const TEAMMATE_NAME_PATTERN = /^[a-z0-9]{1,100}$/;
+// Team names: alphanumeric, hyphens, and underscores (1-50 chars)
+export const TEAM_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,50}$/;
+// Teammate names: alphanumeric, hyphens, and underscores (1-100 chars)
+export const TEAMMATE_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,100}$/;
 
 // Default teams directory
 const DEFAULT_TEAMS_DIR = () => join(homedir(), ".openclaw", "teams");

@@ -51,7 +51,7 @@ export async function maybeSpawnTeammate(params: {
       created: false,
       error: {
         code: "INVALID_TEAMMATE_NAME",
-        message: `Teammate name "${teammateName}" is invalid. Use only lowercase letters and numbers (1-100 chars). Use sanitizeTeammateName() to convert input.`,
+        message: `Teammate name "${teammateName}" is invalid. Use only letters, numbers, hyphens, and underscores (1-100 chars).`,
       },
     };
   }
@@ -81,19 +81,8 @@ export async function maybeSpawnTeammate(params: {
   // Generate agent ID
   const agentId = buildTeammateAgentId(teamName, teammateName);
 
-  // Check current member count
-  const currentMembers = await ledger.listMembers();
-  if (currentMembers.length >= maxTeammates) {
-    return {
-      created: false,
-      error: {
-        code: "TEAM_AT_CAPACITY",
-        message: `Team "${teamName}" has reached maximum teammates (${maxTeammates})`,
-      },
-    };
-  }
-
   // Check for duplicate name in ledger (case-insensitive — agentId is always lowercase)
+  const currentMembers = await ledger.listMembers();
   const duplicateName = currentMembers.find((m) => m.name.toLowerCase() === teammateName.toLowerCase());
   if (duplicateName) {
     return {
@@ -101,6 +90,17 @@ export async function maybeSpawnTeammate(params: {
       error: {
         code: "DUPLICATE_TEAMMATE_NAME",
         message: `Teammate "${teammateName}" already exists in team "${teamName}"`,
+      },
+    };
+  }
+
+  // Check current member count
+  if (currentMembers.length >= maxTeammates) {
+    return {
+      created: false,
+      error: {
+        code: "TEAM_AT_CAPACITY",
+        message: `Team "${teamName}" has reached maximum teammates (${maxTeammates})`,
       },
     };
   }

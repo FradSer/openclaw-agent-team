@@ -58,12 +58,32 @@ export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
     handler: async (params: TeamCreateParams): Promise<TeamCreateResponse | ToolError> => {
       const { team_name, description, agent_type } = params;
 
+      // Check for empty team name
+      if (!team_name || team_name.trim().length === 0) {
+        return {
+          error: {
+            code: "EMPTY_TEAM_NAME",
+            message: "Team name cannot be empty",
+          },
+        };
+      }
+
+      // Check team name length
+      if (team_name.length > 50) {
+        return {
+          error: {
+            code: "TEAM_NAME_TOO_LONG",
+            message: `Team name exceeds maximum length of 50 characters (got ${team_name.length})`,
+          },
+        };
+      }
+
       // Validate team name format
       if (!validateTeamName(team_name)) {
         return {
           error: {
             code: "INVALID_TEAM_NAME",
-            message: `Team name "${team_name}" is invalid. Use only lowercase letters, numbers, and hyphens (1-50 chars).`,
+            message: `Team name "${team_name}" is invalid. Use only letters, numbers, hyphens, and underscores (1-50 chars).`,
           },
         };
       }
