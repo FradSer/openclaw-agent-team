@@ -110,12 +110,14 @@ Constants: `TEAMMATE_AGENT_ID_PREFIX`, `AGENT_TEAM_CHANNEL`, `DEFAULT_WORKSPACE_
 Validation: `validateTeamConfig()`, `validateTeammateDefinition()`, `validateAgentTeamConfig()`
 
 #### `src/ledger.ts` — JSONL Member Persistence
-`TeamLedger` class using JSONL files with in-memory caches. Lazy-loads on first access.
+`TeamLedger` class using JSONL files with in-memory caches for teammate member tracking. Lazy-loads on first access.
 
 JSONL files (in team directory):
-- `members.jsonl` — Teammate member records
+- `members.jsonl` — Teammate member records (sessionKey, name, agentId, agentType, status, joinedAt)
 
 Member methods: `addMember()`, `listMembers()`, `updateMemberStatus()`, `removeMember()`
+
+**Note**: Task tracking functionality is not implemented. The ledger only handles teammate member persistence.
 
 #### `src/storage.ts` — File System Operations
 Manages team directories under `~/.openclaw/teams/` (or custom `teamsDir`).

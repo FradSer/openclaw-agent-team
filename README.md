@@ -15,7 +15,7 @@
 `@fradser/openclaw-agent-team` is an OpenClaw plugin that enables sophisticated multi-agent coordination through:
 
 - **Team Management** — Create and manage teams of AI agents working together
-- **Task Ledger** — Shared JSONL-based task tracking with dependency management
+- **Member Tracking** — JSONL-based teammate member persistence
 - **Inter-Agent Messaging** — Direct communication between teammates via the `agent-team` channel
 - **Dynamic Spawning** — Spawn new agent teammates on-demand with custom configurations
 - **Workspace Isolation** — Each teammate gets dedicated workspace and agent directories
@@ -23,8 +23,7 @@
 ## Features
 
 - **3 Agent Tools**: `team_create`, `team_shutdown`, `teammate_spawn`
-- **JSONL Persistence**: Lightweight, append-only storage for tasks and members
-- **Dependency Tracking**: Task dependencies with circular dependency detection
+- **JSONL Persistence**: Lightweight, append-only storage for member data
 - **Channel Plugin**: Built-in `agent-team` messaging channel for teammate communication
 - **Context Injection**: Automatic teammate context via `before_prompt_build` hook
 - **Capacity Management**: Configurable team size limits (1-50 teammates)
@@ -332,9 +331,7 @@ Teams are stored in `~/.openclaw/teams/{team-name}/` (or custom `teamsDir`):
 ```
 {team-name}/
 ├── config.json                        # TeamConfig JSON
-├── tasks.jsonl                        # Task records (one JSON per line)
 ├── members.jsonl                      # Teammate member records
-├── dependencies.jsonl                 # Task dependency edges
 ├── agents/
 │   └── {teammateName}/               # Teammate workspace directory
 │       ├── workspace/                 # Agent working directory
@@ -349,8 +346,8 @@ Teams are stored in `~/.openclaw/teams/{team-name}/` (or custom `teamsDir`):
 All ledger files use JSONL (JSON Lines) format for efficient append-only operations:
 
 ```jsonl
-{"id":"task-1","subject":"Research","status":"pending","createdAt":"2026-03-05T10:00:00Z"}
-{"id":"task-2","subject":"Analysis","status":"in_progress","owner":"analyst-1","createdAt":"2026-03-05T10:05:00Z"}
+{"sessionKey":"agent:teammate-research-team-analyst-1:main","name":"analyst-1","agentId":"teammate:research-team:analyst-1","agentType":"data-analyst","status":"idle","joinedAt":1709251200000}
+{"sessionKey":"agent:teammate-research-team-writer-1:main","name":"writer-1","agentId":"teammate:research-team:writer-1","agentType":"writer","status":"working","joinedAt":1709251500000}
 ```
 
 ## Development
@@ -408,7 +405,7 @@ openclaw-agent-team/
         │   ├── index.ts          # Plugin entry point
         │   ├── types.ts          # TypeBox schemas
         │   ├── storage.ts        # File operations
-        │   ├── ledger.ts         # Task/member persistence
+        │   ├── ledger.ts         # Member persistence
         │   ├── channel.ts        # Messaging channel
         │   ├── runtime.ts        # Runtime singleton
         │   ├── context-injection.ts  # Context hook

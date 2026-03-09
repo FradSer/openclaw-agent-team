@@ -15,7 +15,7 @@
 `@fradser/openclaw-agent-team` 是一个 OpenClaw 插件，通过以下功能实现复杂的多智能体协作：
 
 - **团队管理** — 创建和管理协同工作的 AI 智能体团队
-- **任务账本** — 基于 JSONL 的共享任务跟踪，支持依赖管理
+- **成员跟踪** — 基于 JSONL 的队友成员持久化
 - **智能体间消息传递** — 通过 `agent-team` 频道实现队友间的直接通信
 - **动态生成** — 按需生成新的智能体队友，支持自定义配置
 - **工作空间隔离** — 每个队友拥有独立的工作空间和智能体目录
@@ -23,8 +23,7 @@
 ## 功能特性
 
 - **3 个智能体工具**：`team_create`、`team_shutdown`、`teammate_spawn`
-- **JSONL 持久化**：轻量级的仅追加存储，用于任务和成员数据
-- **依赖跟踪**：任务依赖关系管理，支持循环依赖检测
+- **JSONL 持久化**：轻量级的仅追加存储，用于成员数据
 - **频道插件**：内置 `agent-team` 消息频道，用于队友通信
 - **上下文注入**：通过 `before_prompt_build` 钩子自动注入队友上下文
 - **容量管理**：可配置的团队规模限制（1-50 个队友）
@@ -332,9 +331,7 @@ graph TB
 ```
 {team-name}/
 ├── config.json                        # TeamConfig JSON
-├── tasks.jsonl                        # 任务记录（每行一个 JSON）
 ├── members.jsonl                      # 队友成员记录
-├── dependencies.jsonl                 # 任务依赖边
 ├── agents/
 │   └── {teammateName}/               # 队友工作空间目录
 │       ├── workspace/                 # 智能体工作目录
@@ -349,8 +346,8 @@ graph TB
 所有账本文件使用 JSONL（JSON Lines）格式，以实现高效的仅追加操作：
 
 ```jsonl
-{"id":"task-1","subject":"Research","status":"pending","createdAt":"2026-03-05T10:00:00Z"}
-{"id":"task-2","subject":"Analysis","status":"in_progress","owner":"analyst-1","createdAt":"2026-03-05T10:05:00Z"}
+{"sessionKey":"agent:teammate-research-team-analyst-1:main","name":"analyst-1","agentId":"teammate:research-team:analyst-1","agentType":"data-analyst","status":"idle","joinedAt":1709251200000}
+{"sessionKey":"agent:teammate-research-team-writer-1:main","name":"writer-1","agentId":"teammate:research-team:writer-1","agentType":"writer","status":"working","joinedAt":1709251500000}
 ```
 
 ## 开发
@@ -409,7 +406,7 @@ openclaw-agent-team/
         │   ├── index.ts          # 插件入口点
         │   ├── types.ts          # TypeBox 模式
         │   ├── storage.ts        # 文件操作
-        │   ├── ledger.ts         # 任务/成员持久化
+        │   ├── ledger.ts         # 成员持久化
         │   ├── channel.ts        # 消息频道
         │   ├── runtime.ts        # 运行时单例
         │   ├── context-injection.ts  # 上下文钩子
