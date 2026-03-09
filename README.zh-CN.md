@@ -68,9 +68,22 @@ pnpm build
         "teamsDir": "~/.openclaw/teams"
       }
     }
-  ]
+  ],
+  "tools": {
+    "sessions": {
+      "visibility": "all"
+    },
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "*"
+      ]
+    }
+  }
 }
 ```
+
+> **重要提示**：必须将 `tools.agentToAgent.enabled` 配置设置为 `true` 才能允许智能体间消息传递，并且 `tools.sessions.visibility` 必须为 `"all"`，以便队友之间能够互相看到。
 
 ## 快速开始
 

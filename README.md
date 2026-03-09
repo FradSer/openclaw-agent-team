@@ -68,9 +68,22 @@ Add to your OpenClaw configuration:
         "teamsDir": "~/.openclaw/teams"
       }
     }
-  ]
+  ],
+  "tools": {
+    "sessions": {
+      "visibility": "all"
+    },
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "*"
+      ]
+    }
+  }
 }
 ```
+
+> **Important**: The `tools.agentToAgent.enabled` configuration must be set to `true` to allow inter-agent messaging, and `tools.sessions.visibility` must be `"all"` for teammates to see each other.
 
 ## Quick Start
 
