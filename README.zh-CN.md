@@ -35,13 +35,13 @@
 ### 前置要求
 
 - Node.js >= 20.0.0
-- OpenClaw >= 1.0.0
+- OpenClaw >= 2026.3.2
 - pnpm（推荐）
 
 ### 从 npm 安装
 
 ```bash
-pnpm add @fradser/openclaw-agent-team
+openclaw plugins install @fradser/openclaw-agent-team
 ```
 
 ### 从源码安装
@@ -148,7 +148,7 @@ graph TB
         DynamicTeammate[dynamic-teammate.ts]
     end
 
-    subgraph Storage["存储层"]
+    subgraph StorageLayer["存储层"]
         Storage[storage.ts]
     end
 
@@ -157,8 +157,8 @@ graph TB
     end
 
     Tools --> Core
-    Core --> Storage
-    Storage --> Foundation
+    Core --> StorageLayer
+    StorageLayer --> Foundation
 ```
 
 ### 层级职责
