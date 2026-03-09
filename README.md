@@ -85,7 +85,19 @@ Add to your OpenClaw configuration:
 
 > **Important**: The `tools.agentToAgent.enabled` configuration must be set to `true` to allow inter-agent messaging, and `tools.sessions.visibility` must be `"all"` for teammates to see each other.
 
-## Quick Start
+## Usage Guide
+
+You don't need to manually invoke the JSON tool calls. Once the plugin is installed and configured, you can simply ask the primary agent in plain language to start a team.
+
+The primary agent will act as the "Team Leader", dynamically creating the team, spawning teammates, assigning tasks, and chatting with them.
+
+**Example Prompts:**
+
+- `"Create an agent team to research the latest AI models and write a report. I need one researcher and one writer."`
+- `"Spawn a team to help me refactor this project. One agent should read the code and propose changes, another should write the tests."`
+- `"Let's build a small web app. Create a frontend developer agent and a backend developer agent to work on it together in a team."`
+
+## Quick Start (Under the Hood)
 
 ### 1. Create a Team
 
@@ -139,6 +151,15 @@ Add to your OpenClaw configuration:
   }
 }
 ```
+
+## How It Works
+
+The `@fradser/openclaw-agent-team` plugin deeply integrates with OpenClaw's runtime to enable multi-agent coordination:
+
+1. **Team Creation (`team_create`)**: When an agent uses the `team_create` tool, the plugin creates a dedicated team directory under `~/.openclaw/teams/` and initializes a `config.json` and a JSONL-based member ledger.
+2. **Dynamic Teammate Spawning (`teammate_spawn`)**: When the `teammate_spawn` tool is called, the plugin validates the request and creates a new OpenClaw session (sub-agent). Crucially, it **binds** this new agent to the OpenClaw runtime (`runtime.agents.set(...)`), dynamically injecting its session key, tools, and configurations so the new teammate runs immediately within the same OpenClaw daemon.
+3. **Context Injection**: Through the `before_prompt_build` hook, the plugin automatically injects team awareness into every teammate's prompt. This allows agents to intuitively know their role, the current active team members, and how to communicate with others.
+4. **Inter-Agent Messaging**: The built-in `agent-team` channel plugin allows agents to address each other using the format `teamName:teammateName`. Messages are appended to individual `messages.jsonl` files in the team's inbox, and OpenClaw routes them securely to the target agent session.
 
 ## Architecture
 
