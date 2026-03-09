@@ -4,6 +4,7 @@
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
 [![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?style=flat&logo=nodedotjs)](https://nodejs.org)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-v2026.3.2+-blue?style=flat)](https://openclaw.dev)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Twitter Follow](https://img.shields.io/twitter/follow/FradSer?style=social)](https://twitter.com/FradSer)
 
