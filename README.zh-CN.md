@@ -1,12 +1,13 @@
 # OpenClaw Agent Team
 
-> OpenClaw 多智能体团队协作插件，支持共享任务账本和智能体间消息传递
+> OpenClaw 多智能体团队协作插件，支持共享任务账本和智能体间消息传递。
 
-中文文档 | [English](README.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?style=flat&logo=nodedotjs)](https://nodejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Twitter Follow](https://img.shields.io/twitter/follow/FradSer?style=social)](https://twitter.com/FradSer)
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/FradSer/openclaw-agent-team)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 ## 概述
 
@@ -361,7 +362,7 @@ openclaw-agent-team/
 ├── pnpm-workspace.yaml           # 工作空间配置
 ├── CLAUDE.md                     # 开发文档
 ├── README.md                     # 英文文档
-├── README.zh-CN.md               # 中文文档（本文件）
+├── README.zh-CN.md               # 中文文档
 └── packages/
     └── openclaw-agent-team/      # 主插件包
         ├── package.json
@@ -415,12 +416,6 @@ openclaw-agent-team/
 MIT License
 
 Copyright (c) 2026 Frad LEE
-
-特此免费授予任何获得本软件及相关文档文件（"软件"）副本的人不受限制地处理本软件的权利，包括但不限于使用、复制、修改、合并、发布、分发、再许可和/或销售本软件副本的权利，并允许向其提供本软件的人这样做，但须符合以下条件：
-
-上述版权声明和本许可声明应包含在本软件的所有副本或主要部分中。
-
-本软件按"原样"提供，不提供任何形式的明示或暗示保证，包括但不限于对适销性、特定用途适用性和非侵权性的保证。在任何情况下，作者或版权持有人均不对任何索赔、损害或其他责任负责，无论是在合同诉讼、侵权行为还是其他方面，由软件或软件的使用或其他交易引起、产生或与之相关。
 
 ## 作者
 

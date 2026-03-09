@@ -1,12 +1,13 @@
 # OpenClaw Agent Team
 
-> Multi-agent team coordination plugin for OpenClaw with shared task ledger and inter-agent messaging
+> Multi-agent team coordination plugin for OpenClaw with shared task ledger and inter-agent messaging.
 
-[中文文档](README.zh-CN.md) | English
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-3178c6?style=flat&logo=typescript)](https://www.typescriptlang.org/)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-339933?style=flat&logo=nodedotjs)](https://nodejs.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Twitter Follow](https://img.shields.io/twitter/follow/FradSer?style=social)](https://twitter.com/FradSer)
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/FradSer/openclaw-agent-team)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
 ## Overview
 
@@ -414,24 +415,6 @@ Contributions are welcome! Please follow these guidelines:
 MIT License
 
 Copyright (c) 2026 Frad LEE
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
 
 ## Author
 
