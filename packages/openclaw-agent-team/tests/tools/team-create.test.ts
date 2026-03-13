@@ -91,7 +91,7 @@ describe("team_create tool", () => {
         const result = (await tool.handler({ team_name: "valid-name" })) as ToolError;
 
         expect(result).toHaveProperty("error");
-        expect(result.error.code).toBe("UNAUTHORIZED");
+        expect(result.error.code).toBe("MISSING_CALLER_AGENT_ID");
       });
     });
 

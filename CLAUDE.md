@@ -272,6 +272,7 @@ Tools return structured errors with a `code` field:
 | `INVALID_TEAM_NAME` | Name fails regex or length validation |
 | `TEAM_NAME_TOO_LONG` | Name exceeds 50 characters |
 | `EMPTY_TEAM_NAME` | Name is empty |
+| `MISSING_CALLER_AGENT_ID` | Tool invoked outside an agent session (no caller agentId) |
 | `TEAM_NOT_FOUND` | No team with the given name |
 | `TEAM_ALREADY_SHUTDOWN` | Team is already in shutdown state |
 | `TEAM_NOT_ACTIVE` | Team exists but is not active |

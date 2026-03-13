@@ -103,7 +103,7 @@ export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
       if (!callerAgentId) {
         return {
           error: {
-            code: "UNAUTHORIZED",
+            code: "MISSING_CALLER_AGENT_ID",
             message: "A caller agent ID is required to create a team. Ensure the tool is invoked within an active agent session.",
           },
         };
@@ -121,7 +121,7 @@ export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
         id: teamId,
         team_name,
         agent_type: agent_type ?? "team-lead",
-        lead: callerAgentId ?? "",
+        lead: callerAgentId,
         metadata: {
           createdAt: now,
           updatedAt: now,
