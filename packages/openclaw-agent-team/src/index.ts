@@ -4,7 +4,7 @@ import { readdir } from "node:fs/promises";
 import type { TSchema } from "@sinclair/typebox";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
 import { AgentTeamConfigSchema, AGENT_TEAM_CHANNEL } from "./types.js";
-import { createTeamCreateTool } from "./tools/team-create.js";
+import { createTeamCreateTool, type TeamCreateParams } from "./tools/team-create.js";
 import { createTeamShutdownTool } from "./tools/team-shutdown.js";
 import { createTeammateSpawnTool } from "./tools/teammate-spawn.js";
 import { TeamLedger } from "./ledger.js";
@@ -18,16 +18,33 @@ export const PLUGIN_ID = "openclaw-agent-team";
 export const PLUGIN_NAME = "Agent Team";
 export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with messaging";
 
+// SDK context available in tool factories — populated per agent session
+interface OpenClawPluginToolContext {
+  agentId?: string;
+  sessionKey?: string;
+  sessionId?: string;
+  workspaceDir?: string;
+  agentDir?: string;
+}
+
 // OpenClaw Plugin API types (matching clawdbot-feishu pattern)
 interface OpenClawPluginApi {
   registerTool(
-    tool: {
-      name: string;
-      label: string;
-      description: string;
-      parameters: TSchema;
-      execute: (toolCallId: string, params: unknown) => Promise<unknown>;
-    },
+    tool:
+      | {
+          name: string;
+          label: string;
+          description: string;
+          parameters: TSchema;
+          execute: (toolCallId: string, params: unknown) => Promise<unknown>;
+        }
+      | ((ctx: OpenClawPluginToolContext) => {
+          name: string;
+          label: string;
+          description: string;
+          parameters: TSchema;
+          execute: (toolCallId: string, params: unknown) => Promise<unknown>;
+        } | null | undefined),
     options: { name: string }
   ): void;
   registerChannel(params: { plugin: unknown }): void;
@@ -134,15 +151,26 @@ function registerTool<P>(
  * Registers all team management tools.
  */
 function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
-  // Team management tools
+  // team_create uses factory registration so the handler receives the caller's agentId,
+  // which becomes the team lead. The factory is invoked per agent session by the SDK.
   const teamCreateTool = createTeamCreateTool(ctx);
-  registerTool(api, {
-    name: "team_create",
-    label: "Team Create",
-    description: "Creates a new team for multi-agent coordination",
-    parameters: teamCreateTool.schema,
-    run: (params) => teamCreateTool.handler(params as never),
-  });
+  api.registerTool(
+    (sdkCtx: OpenClawPluginToolContext) => ({
+      name: "team_create",
+      label: teamCreateTool.label,
+      description: teamCreateTool.description,
+      parameters: teamCreateTool.schema,
+      async execute(_toolCallId: string, params: unknown) {
+        try {
+          return await teamCreateTool.handler(params as TeamCreateParams, sdkCtx?.agentId);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { error: { code: "EXECUTION_ERROR", message } };
+        }
+      },
+    }),
+    { name: "team_create" }
+  );
 
   const teamShutdownTool = createTeamShutdownTool(ctx);
   registerTool(api, {

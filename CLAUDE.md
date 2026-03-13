@@ -9,7 +9,7 @@ This is a pnpm monorepo for `@fradser/openclaw-agent-team`, an OpenClaw plugin e
 **Package**: `@fradser/openclaw-agent-team` v1.0.0
 **Author**: Frad LEE <fradser@gmail.com>
 **License**: MIT
-**Peer dependency**: `openclaw >=1.0.0`
+**Peer dependency**: `openclaw >=2026.3.2`
 
 ## Commands
 

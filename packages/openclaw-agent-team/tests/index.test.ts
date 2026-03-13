@@ -128,10 +128,11 @@ describe("Plugin Entry Point", () => {
     });
 
     describe("When registering tools", () => {
-      it("Then should register team_create tool", () => {
+      it("Then should register team_create tool via factory (options.name identifies it)", () => {
         plugin.register(mockApi);
+        // team_create uses the factory pattern — check via the options second arg
         expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "team_create" }),
+          expect.any(Function),
           expect.objectContaining({ name: "team_create" })
         );
       });
@@ -157,12 +158,16 @@ describe("Plugin Entry Point", () => {
         expect(mockApi.registerTool).toHaveBeenCalledTimes(3);
       });
 
-      it("Then tools should have execute function", () => {
+      it("Then tools should have execute function (factory tools resolved before checking)", () => {
         plugin.register(mockApi);
-        const calls = mockApi.registerTool.mock.calls;
-        for (const call of calls) {
-          expect(call[0]).toHaveProperty("execute");
-          expect(typeof call[0].execute).toBe("function");
+        const calls = mockApi.registerTool.mock.calls as Array<[unknown, unknown]>;
+        for (const [toolOrFactory] of calls) {
+          // Resolve factory tools before checking for execute
+          const tool = typeof toolOrFactory === "function"
+            ? (toolOrFactory as (ctx: object) => unknown)({})
+            : toolOrFactory;
+          expect(tool).toHaveProperty("execute");
+          expect(typeof (tool as { execute: unknown }).execute).toBe("function");
         }
       });
     });

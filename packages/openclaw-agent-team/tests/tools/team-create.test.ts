@@ -20,8 +20,10 @@ interface ToolError {
 
 interface PluginContext {
   teamsDir: string;
-  api: Record<string, unknown>;
 }
+
+// Simulates the agentId provided by the SDK tool factory context
+const CALLER_ID = "test-agent";
 
 describe("team_create tool", () => {
   let tempDir: string;
@@ -30,10 +32,7 @@ describe("team_create tool", () => {
   beforeEach(async () => {
     tempDir = join(process.cwd(), "test-temp", `team-create-test-${Date.now()}`);
     await mkdir(tempDir, { recursive: true });
-    ctx = {
-      teamsDir: tempDir,
-      api: {},
-    };
+    ctx = { teamsDir: tempDir };
   });
 
   afterEach(async () => {
@@ -44,45 +43,29 @@ describe("team_create tool", () => {
     describe("When creating a team with minimal parameters", () => {
       it("Then should return teamId as valid UUID, status 'active', and create directory structure", async () => {
         const tool = createTeamCreateTool(ctx);
-        const result = (await tool.handler({ team_name: "my-team" })) as TeamCreateResponse;
+        const result = (await tool.handler({ team_name: "my-team" }, CALLER_ID)) as TeamCreateResponse;
 
-        // Verify response format
         expect(result).toHaveProperty("teamId");
         expect(result).toHaveProperty("teamName");
         expect(result).toHaveProperty("status");
 
-        // Verify teamId is a valid UUID format
         const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         expect(result.teamId).toMatch(uuidPattern);
-
-        // Verify teamName matches input
         expect(result.teamName).toBe("my-team");
-
-        // Verify status is "active"
         expect(result.status).toBe("active");
 
-        // Verify directory structure was created
         const teamDir = join(tempDir, "my-team");
-        const dirStat = await stat(teamDir);
-        expect(dirStat.isDirectory()).toBe(true);
-
-        const configFile = join(teamDir, "config.json");
-        const configStat = await stat(configFile);
-        expect(configStat.isFile()).toBe(true);
-
-        const agentsDir = join(teamDir, "agents");
-        const agentsStat = await stat(agentsDir);
-        expect(agentsStat.isDirectory()).toBe(true);
+        expect((await stat(teamDir)).isDirectory()).toBe(true);
+        expect((await stat(join(teamDir, "config.json"))).isFile()).toBe(true);
+        expect((await stat(join(teamDir, "agents"))).isDirectory()).toBe(true);
       });
 
       it("Then should write team config with UUID matching response", async () => {
         const tool = createTeamCreateTool(ctx);
-        const result = (await tool.handler({ team_name: "config-test-team" })) as TeamCreateResponse;
+        const result = (await tool.handler({ team_name: "config-test-team" }, CALLER_ID)) as TeamCreateResponse;
 
-        // Read the config file and verify it contains the same teamId
         const { readFile } = await import("node:fs/promises");
-        const configPath = join(tempDir, "config-test-team", "config.json");
-        const configContent = await readFile(configPath, "utf-8");
+        const configContent = await readFile(join(tempDir, "config-test-team", "config.json"), "utf-8");
         const config = JSON.parse(configContent) as TeamConfig;
 
         expect(config.id).toBe(result.teamId);
@@ -91,21 +74,40 @@ describe("team_create tool", () => {
       });
     });
 
+    describe("When creating a team with a caller agent ID", () => {
+      it("Then should record the caller as team lead", async () => {
+        const tool = createTeamCreateTool(ctx);
+        await tool.handler({ team_name: "led-team" }, CALLER_ID);
+
+        const { readFile } = await import("node:fs/promises");
+        const configContent = await readFile(join(tempDir, "led-team", "config.json"), "utf-8");
+        const config = JSON.parse(configContent) as TeamConfig;
+
+        expect(config.lead).toBe(CALLER_ID);
+      });
+
+      it("Then should return UNAUTHORIZED error when no caller ID provided", async () => {
+        const tool = createTeamCreateTool(ctx);
+        const result = (await tool.handler({ team_name: "valid-name" })) as ToolError;
+
+        expect(result).toHaveProperty("error");
+        expect(result.error.code).toBe("UNAUTHORIZED");
+      });
+    });
+
     describe("When creating a team with optional parameters", () => {
       it("Then should accept description and use default agent_type", async () => {
         const tool = createTeamCreateTool(ctx);
-        const result = (await tool.handler({
-          team_name: "described-team",
-          description: "A team with a description",
-        })) as TeamCreateResponse;
+        const result = (await tool.handler(
+          { team_name: "described-team", description: "A team with a description" },
+          CALLER_ID
+        )) as TeamCreateResponse;
 
         expect(result.teamName).toBe("described-team");
         expect(result.status).toBe("active");
 
-        // Verify description was saved to config
         const { readFile } = await import("node:fs/promises");
-        const configPath = join(tempDir, "described-team", "config.json");
-        const configContent = await readFile(configPath, "utf-8");
+        const configContent = await readFile(join(tempDir, "described-team", "config.json"), "utf-8");
         const config = JSON.parse(configContent) as TeamConfig;
 
         expect(config.description).toBe("A team with a description");
@@ -114,14 +116,10 @@ describe("team_create tool", () => {
 
       it("Then should accept custom agent_type", async () => {
         const tool = createTeamCreateTool(ctx);
-        const result = (await tool.handler({
-          team_name: "custom-agent-team",
-          agent_type: "custom-lead",
-        })) as TeamCreateResponse;
+        await tool.handler({ team_name: "custom-agent-team", agent_type: "custom-lead" }, CALLER_ID);
 
         const { readFile } = await import("node:fs/promises");
-        const configPath = join(tempDir, "custom-agent-team", "config.json");
-        const configContent = await readFile(configPath, "utf-8");
+        const configContent = await readFile(join(tempDir, "custom-agent-team", "config.json"), "utf-8");
         const config = JSON.parse(configContent) as TeamConfig;
 
         expect(config.agent_type).toBe("custom-lead");
@@ -134,13 +132,10 @@ describe("team_create tool", () => {
       it("Then should return DUPLICATE_TEAM_NAME error", async () => {
         const tool = createTeamCreateTool(ctx);
 
-        // Create first team
-        const firstResult = (await tool.handler({ team_name: "duplicate-test" })) as TeamCreateResponse;
+        const firstResult = (await tool.handler({ team_name: "duplicate-test" }, CALLER_ID)) as TeamCreateResponse;
         expect(firstResult.status).toBe("active");
 
-        // Attempt to create duplicate
-        const secondResult = (await tool.handler({ team_name: "duplicate-test" })) as ToolError;
-
+        const secondResult = (await tool.handler({ team_name: "duplicate-test" }, CALLER_ID)) as ToolError;
         expect(secondResult).toHaveProperty("error");
         expect(secondResult.error.code).toBe("DUPLICATE_TEAM_NAME");
         expect(secondResult.error.message).toContain("already exists");
@@ -189,8 +184,7 @@ describe("team_create tool", () => {
     describe("When attempting to create a team with name exceeding 50 characters", () => {
       it("Then should return TEAM_NAME_TOO_LONG error", async () => {
         const tool = createTeamCreateTool(ctx);
-        const longName = "a".repeat(51);
-        const result = (await tool.handler({ team_name: longName })) as ToolError;
+        const result = (await tool.handler({ team_name: "a".repeat(51) })) as ToolError;
 
         expect(result).toHaveProperty("error");
         expect(result.error.code).toBe("TEAM_NAME_TOO_LONG");
@@ -200,7 +194,7 @@ describe("team_create tool", () => {
       it("Then should accept team name with exactly 50 characters", async () => {
         const tool = createTeamCreateTool(ctx);
         const maxName = "a".repeat(50);
-        const result = (await tool.handler({ team_name: maxName })) as TeamCreateResponse;
+        const result = (await tool.handler({ team_name: maxName }, CALLER_ID)) as TeamCreateResponse;
 
         expect(result.status).toBe("active");
         expect(result.teamName).toBe(maxName);
@@ -223,19 +217,17 @@ describe("team_create tool", () => {
 
   describe("Tool schema", () => {
     it("should have correct tool name", () => {
-      const tool = createTeamCreateTool(ctx);
-      expect(tool.name).toBe("team_create");
+      expect(createTeamCreateTool(ctx).name).toBe("team_create");
     });
 
     it("should have description", () => {
-      const tool = createTeamCreateTool(ctx);
-      expect(tool.description).toBeDefined();
-      expect(tool.description.length).toBeGreaterThan(0);
+      const desc = createTeamCreateTool(ctx).description;
+      expect(desc).toBeDefined();
+      expect(desc.length).toBeGreaterThan(0);
     });
 
     it("should have schema defined", () => {
-      const tool = createTeamCreateTool(ctx);
-      expect(tool.schema).toBeDefined();
+      expect(createTeamCreateTool(ctx).schema).toBeDefined();
     });
   });
 });

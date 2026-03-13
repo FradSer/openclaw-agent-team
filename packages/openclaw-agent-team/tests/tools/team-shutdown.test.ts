@@ -70,10 +70,12 @@ describe("team_shutdown tool", () => {
     await rm(join(process.cwd(), "test-temp"), { recursive: true, force: true });
   });
 
+  const CALLER_ID = "test-agent";
+
   // Helper function to create a team for testing
   async function createTestTeam(teamName: string): Promise<string> {
     const teamCreateTool = createTeamCreateTool(ctx);
-    const result = await teamCreateTool.handler({ team_name: teamName });
+    const result = await teamCreateTool.handler({ team_name: teamName }, CALLER_ID);
     return (result as { teamId: string }).teamId;
   }
 

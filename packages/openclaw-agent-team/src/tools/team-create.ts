@@ -34,7 +34,6 @@ export interface ToolError {
 // Plugin context type
 export interface PluginContext {
   teamsDir: string;
-  api?: unknown;
 }
 
 // Tool type for testing compatibility
@@ -43,19 +42,20 @@ export interface TeamCreateTool {
   name: string;
   description: string;
   schema: typeof TeamCreateSchema;
-  handler: (params: TeamCreateParams) => Promise<TeamCreateResponse | ToolError>;
+  handler: (params: TeamCreateParams, callerAgentId?: string) => Promise<TeamCreateResponse | ToolError>;
 }
 
 /**
- * Creates a team_create tool that creates new teams with isolated storage.
+ * Creates a team_create tool. The calling agent becomes the team lead —
+ * pass callerAgentId (from the SDK tool factory context) at execution time.
  */
 export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
   return {
     label: "Team Create",
     name: "team_create",
-    description: "Creates a new team with isolated storage",
+    description: "Creates a new agent team. The calling agent is registered as the team lead.",
     schema: TeamCreateSchema,
-    handler: async (params: TeamCreateParams): Promise<TeamCreateResponse | ToolError> => {
+    handler: async (params: TeamCreateParams, callerAgentId?: string): Promise<TeamCreateResponse | ToolError> => {
       const { team_name, description, agent_type } = params;
 
       // Check for empty team name
@@ -99,19 +99,29 @@ export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
         };
       }
 
+      // Caller identity is required — the calling agent becomes the team lead
+      if (!callerAgentId) {
+        return {
+          error: {
+            code: "UNAUTHORIZED",
+            message: "A caller agent ID is required to create a team. Ensure the tool is invoked within an active agent session.",
+          },
+        };
+      }
+
       // Create team directory structure
       await createTeamDirectory(ctx.teamsDir, team_name);
 
       // Generate UUID for team
       const teamId = randomUUID();
 
-      // Create team config
+      // The calling agent is the team lead
       const now = Date.now();
       const config: TeamConfig = {
         id: teamId,
         team_name,
         agent_type: agent_type ?? "team-lead",
-        lead: "", // Will be set when a lead agent joins
+        lead: callerAgentId ?? "",
         metadata: {
           createdAt: now,
           updatedAt: now,
@@ -120,7 +130,6 @@ export function createTeamCreateTool(ctx: PluginContext): TeamCreateTool {
         ...(description !== undefined && { description }),
       };
 
-      // Write team config
       await writeTeamConfig(ctx.teamsDir, team_name, config);
 
       return {
