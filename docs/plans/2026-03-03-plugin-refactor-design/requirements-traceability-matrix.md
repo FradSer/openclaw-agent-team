@@ -32,9 +32,9 @@ The plugin currently duplicates functionality:
 |----------|---------|--------|
 | Team Management | 2 | 2 |
 | Teammate Management | 1 | 2 (add `teammate_remove`) |
-| Task Management | 4 | 4 |
-| Messaging | 2 | 0 (removed) |
-| **Total** | **9** | **8** |
+| Task Management | 0 (not yet created) | 4 |
+| Messaging | 0 (removed) | 0 |
+| **Total** | **3** | **8** |
 
 ---
 
@@ -77,19 +77,19 @@ The plugin currently duplicates functionality:
 | FR-RM-004 | `teammate_remove` rejects non-existent teammate with error code `TEAMMATE_NOT_FOUND` | Must | BDD | `tools/teammate-remove.ts` (NEW) | BDD: Teammate Remove |
 | FR-RM-005 | `teammate_remove` rejects non-existent team with error code `TEAM_NOT_FOUND` | Must | BDD | `tools/teammate-remove.ts` (NEW) | BDD: Teammate Remove |
 
-### Task Management (Unchanged)
+### Task Management (Not Yet Created)
 
 | ID | Requirement | Priority | Source | Implementation | Test Coverage |
 |----|-------------|----------|--------|----------------|---------------|
-| FR-TK-001 | `task_create` creates task with subject, description, optional dependencies | Must | Design R6 | `tools/task-create.ts` (unchanged) | BDD: Task Creation |
+| FR-TK-001 | `task_create` creates task with subject, description, optional dependencies | Must | Design R6 | `tools/task-create.ts` (TODO) | BDD: Task Creation |
 | FR-TK-002 | `task_create` rejects circular dependencies with error code `CIRCULAR_DEPENDENCY` | Must | BDD | `tools/task-create.ts` | BDD: Task Creation |
 | FR-TK-003 | `task_create` rejects non-existent blocking task with error code `BLOCKING_TASK_NOT_FOUND` | Must | BDD | `tools/task-create.ts` | BDD: Task Creation |
-| FR-TK-004 | `task_list` returns tasks with filters: status, owner, includeCompleted | Must | Design R6 | `tools/task-list.ts` (unchanged) | BDD: Task List |
+| FR-TK-004 | `task_list` returns tasks with filters: status, owner, includeCompleted | Must | Design R6 | `tools/task-list.ts` (TODO) | BDD: Task List |
 | FR-TK-005 | `task_list` returns empty array for team with no tasks | Must | BDD | `tools/task-list.ts` | BDD: Task List |
-| FR-TK-006 | `task_claim` claims available task for session owner | Must | Design R6 | `tools/task-claim.ts` (unchanged) | BDD: Task Claim |
+| FR-TK-006 | `task_claim` claims available task for session owner | Must | Design R6 | `tools/task-claim.ts` (TODO) | BDD: Task Claim |
 | FR-TK-007 | `task_claim` rejects already claimed task with error code `TASK_ALREADY_CLAIMED` | Must | BDD | `tools/task-claim.ts` | BDD: Task Claim |
 | FR-TK-008 | `task_claim` rejects blocked task with error code `TASK_IS_BLOCKED` | Must | BDD | `tools/task-claim.ts` | BDD: Task Claim |
-| FR-TK-009 | `task_complete` marks claimed task as completed | Must | Design R6 | `tools/task-complete.ts` (unchanged) | BDD: Task Complete |
+| FR-TK-009 | `task_complete` marks claimed task as completed | Must | Design R6 | `tools/task-complete.ts` (TODO) | BDD: Task Complete |
 | FR-TK-010 | `task_complete` rejects task owned by another with error code `NOT_TASK_OWNER` | Must | BDD | `tools/task-complete.ts` | BDD: Task Complete |
 | FR-TK-011 | Completing task unblocks dependent tasks | Must | BDD | `tools/task-complete.ts` | BDD: Task Complete |
 
@@ -123,44 +123,45 @@ The plugin currently duplicates functionality:
 
 ## Files to Delete
 
-| File | Lines | Reason | Dependencies to Remove |
-|------|-------|--------|------------------------|
-| `src/mailbox.ts` | 184 | Replaced by sessions_send | None (only used by deleted files) |
-| `src/context-injection.ts` | 100 | No longer needed | `mailbox.ts` |
-| `src/teammate-invoker.ts` | 99 | Replaced by sessions_send | `reply-dispatcher.ts`, `runtime.ts` |
-| `src/reply-dispatcher.ts` | 65 | Use core mechanisms | `mailbox.ts`, `runtime.ts` |
-| `src/tools/send-message.ts` | 194 | Replaced by sessions_send | `mailbox.ts`, `teammate-invoker.ts` |
-| `src/tools/inbox.ts` | 113 | Replaced by session history | None |
+| File | Lines | Reason | Status |
+|------|-------|--------|--------|
+| `src/mailbox.ts` | 184 | Replaced by sessions_send | DELETED |
+| `src/teammate-invoker.ts` | 99 | Replaced by sessions_send | DELETED |
+| `src/reply-dispatcher.ts` | 65 | Use core mechanisms | DELETED |
+| `src/tools/send-message.ts` | 194 | Replaced by sessions_send | DELETED |
+| `src/tools/inbox.ts` | 113 | Replaced by session history | DELETED |
+| `src/context-injection.ts` | 100 | No longer needed | pending |
 
-**Total lines to remove:** ~755 lines
+**Lines already removed:** ~755
 
 ---
 
 ## Files to Keep/Modify
 
-| File | Action | Changes Required |
-|------|--------|------------------|
-| `src/index.ts` | Modify | Remove deleted tool registrations, remove context injection hook, remove re-exports |
-| `src/types.ts` | Keep | No changes required |
-| `src/ledger.ts` | Keep | No changes required |
-| `src/storage.ts` | Keep | No changes required |
-| `src/runtime.ts` | Keep | No changes required |
-| `src/channel.ts` | Keep | Minimal channel plugin (unchanged) |
-| `src/tools/team-create.ts` | Keep | No changes required |
-| `src/tools/team-shutdown.ts` | Modify | Add directory deletion, ensure config cleanup |
-| `src/tools/teammate-spawn.ts` | Modify | Extract agent management to `agent-manager.ts` |
-| `src/tools/teammate-remove.ts` | Create | New tool for removing single teammate |
-| `src/tools/task-create.ts` | Keep | No changes required |
-| `src/tools/task-list.ts` | Keep | No changes required |
-| `src/tools/task-claim.ts` | Keep | No changes required |
-| `src/tools/task-complete.ts` | Keep | No changes required |
+| File | Action | Changes Required | Status |
+|------|--------|------------------|--------|
+| `src/index.ts` | Modify | Remove context injection hook registration | pending |
+| `src/types.ts` | Keep | No changes required | done |
+| `src/ledger.ts` | Keep | No changes required | done |
+| `src/storage.ts` | Keep | No changes required | done |
+| `src/runtime.ts` | Keep | No changes required | done |
+| `src/channel.ts` | Keep | Minimal channel plugin (unchanged) | done |
+| `src/dynamic-teammate.ts` | Refactor | Extract into `agent-manager.ts` | pending |
+| `src/context-injection.ts` | Delete | No longer needed | pending |
+| `src/tools/team-create.ts` | Keep | No changes required | done |
+| `src/tools/team-shutdown.ts` | Modify | Use AgentManager for batch removal | pending |
+| `src/tools/teammate-spawn.ts` | Modify | Delegate to AgentManager | pending |
 
 ### New Files to Create
 
-| File | Purpose |
-|------|---------|
-| `src/core/agent-manager.ts` | Dynamic agent lifecycle management (createAgent, removeAgent, listTeamAgents) |
-| `src/tools/teammate-remove.ts` | Tool to remove a single teammate |
+| File | Purpose | Status |
+|------|---------|--------|
+| `src/core/agent-manager.ts` | Dynamic agent lifecycle management (createAgent, removeAgent, listTeamAgents) | TODO |
+| `src/tools/teammate-remove.ts` | Tool to remove a single teammate | TODO |
+| `src/tools/task-create.ts` | Task creation with dependency support | TODO |
+| `src/tools/task-list.ts` | Task listing with filters | TODO |
+| `src/tools/task-claim.ts` | Task claiming | TODO |
+| `src/tools/task-complete.ts` | Task completion | TODO |
 
 ---
 
@@ -182,43 +183,40 @@ The plugin currently duplicates functionality:
 
 ## Migration Path
 
-### Phase 1: Foundation (Low Risk)
+### Phase 1: Messaging Deletion (COMPLETE)
+
+| Step | Action | Files | Status |
+|------|--------|-------|--------|
+| 1.1 | Delete `mailbox.ts` | `src/mailbox.ts` | DONE |
+| 1.2 | Delete `send-message.ts` | `src/tools/send-message.ts` | DONE |
+| 1.3 | Delete `inbox.ts` | `src/tools/inbox.ts` | DONE |
+| 1.4 | Delete `teammate-invoker.ts` | `src/teammate-invoker.ts` | DONE |
+| 1.5 | Delete `reply-dispatcher.ts` | `src/reply-dispatcher.ts` | DONE |
+
+### Phase 2: Context Injection Cleanup
 
 | Step | Action | Files |
 |------|--------|-------|
-| 1.1 | Create `src/core/agent-manager.ts` with AgentManager interface | New file |
-| 1.2 | Update `src/types.ts` if needed for new types | Modify |
-| 1.3 | Write unit tests for AgentManager | New test file |
+| 2.1 | Delete `context-injection.ts` | `src/context-injection.ts` |
+| 2.2 | Remove hook registration from `index.ts` | `src/index.ts` |
 
-### Phase 2: Tool Refactoring (Medium Risk)
-
-| Step | Action | Files |
-|------|--------|-------|
-| 2.1 | Refactor `teammate-spawn.ts` to use AgentManager | Modify |
-| 2.2 | Refactor `team-shutdown.ts` to use AgentManager + add directory deletion | Modify |
-| 2.3 | Create `teammate-remove.ts` tool | New file |
-| 2.4 | Update tests for refactored tools | Modify tests |
-
-### Phase 3: Deletion (Low Risk after Phase 2)
+### Phase 3: Agent Manager Refactor
 
 | Step | Action | Files |
 |------|--------|-------|
-| 3.1 | Delete `tools/send-message.ts` | Delete |
-| 3.2 | Delete `tools/inbox.ts` | Delete |
-| 3.3 | Delete `mailbox.ts` | Delete |
-| 3.4 | Delete `context-injection.ts` | Delete |
-| 3.5 | Delete `teammate-invoker.ts` | Delete |
-| 3.6 | Delete `reply-dispatcher.ts` | Delete |
+| 3.1 | Create `src/core/agent-manager.ts` (extract from `dynamic-teammate.ts`) | New file |
+| 3.2 | Refactor `teammate-spawn.ts` to use AgentManager | Modify |
+| 3.3 | Refactor `team-shutdown.ts` to use AgentManager | Modify |
+| 3.4 | Write unit tests for AgentManager | New test file |
 
-### Phase 4: Cleanup (Low Risk)
+### Phase 4: New Tools
 
 | Step | Action | Files |
 |------|--------|-------|
-| 4.1 | Update `index.ts` to remove deleted tool registrations | Modify |
-| 4.2 | Remove deleted re-exports from `index.ts` | Modify |
-| 4.3 | Remove context injection hook registration from `index.ts` | Modify |
-| 4.4 | Update tests to remove references to deleted modules | Modify tests |
-| 4.5 | Run full test suite | N/A |
+| 4.1 | Create `teammate-remove.ts` | New file |
+| 4.2 | Create task tools (`task-create`, `task-list`, `task-claim`, `task-complete`) | New files |
+| 4.3 | Register new tools in `index.ts` | Modify |
+| 4.4 | Write tests for new tools | New test files |
 
 ### Phase 5: Validation
 
@@ -228,7 +226,6 @@ The plugin currently duplicates functionality:
 | 5.2 | Run lint | `pnpm lint` |
 | 5.3 | Build plugin | `pnpm build` |
 | 5.4 | Integration test with OpenClaw core | Manual |
-| 5.5 | Verify code size reduction | Line count |
 
 ---
 
@@ -236,11 +233,12 @@ The plugin currently duplicates functionality:
 
 | Risk | Impact | Likelihood | Mitigation |
 |------|--------|------------|------------|
-| AgentManager API incompatible with core | High | Low | Review core PluginRuntime interface before implementation |
 | Directory deletion fails on Windows | Medium | Low | Use recursive delete with error handling |
 | Existing teams break after upgrade | High | Low | Migration script or compatibility check |
 | Tests fail after deletion | Medium | Medium | Phase-based deletion with test runs between phases |
 | Binding routing changes | High | Medium | Verify routing still works after refactor |
+
+Note: `runtime.config.loadConfig()` and `runtime.config.writeConfigFile()` are confirmed official public API in `PluginRuntimeCore` from `openclaw/plugin-sdk`. No risk from using these methods.
 
 ---
 
@@ -287,3 +285,4 @@ NFR-*    --> tests/features/config-sync.test.ts, tests/features/error-handling.t
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-03-03 | Claude Code | Initial creation |
+| 1.1 | 2026-03-14 | Claude Code | Reflect actual state: messaging files deleted, task tools not yet created, `dynamic-teammate.ts` exists, `runtime.config` confirmed official API |

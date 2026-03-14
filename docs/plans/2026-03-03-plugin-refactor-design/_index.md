@@ -94,14 +94,34 @@ packages/openclaw-agent-team/src/
 
 ### Files to Delete
 
-| File | Reason |
-|------|--------|
-| `mailbox.ts` | Replaced by sessions_send |
-| `context-injection.ts` | No longer needed |
-| `teammate-invoker.ts` | Replaced by sessions_send |
-| `reply-dispatcher.ts` | Use core mechanisms |
-| `tools/send-message.ts` | Replaced by sessions_send |
-| `tools/inbox.ts` | Replaced by session history |
+| File | Reason | Status |
+|------|--------|--------|
+| `mailbox.ts` | Replaced by sessions_send | DELETED |
+| `teammate-invoker.ts` | Replaced by sessions_send | DELETED |
+| `reply-dispatcher.ts` | Use core mechanisms | DELETED |
+| `tools/send-message.ts` | Replaced by sessions_send | DELETED |
+| `tools/inbox.ts` | Replaced by session history | DELETED |
+| `context-injection.ts` | No longer needed | pending |
+
+### Current Source Files (as of 2026-03-14)
+
+```
+packages/openclaw-agent-team/src/
+├── index.ts                    # Plugin entry point
+├── types.ts                    # TypeBox schemas
+├── ledger.ts                   # Member persistence (JSONL)
+├── storage.ts                  # Path resolution, directory ops
+├── runtime.ts                  # PluginRuntime singleton
+├── channel.ts                  # agent-team channel plugin
+├── dynamic-teammate.ts         # Agent lifecycle (createAgent, repairBinding)
+├── context-injection.ts        # before_prompt_build hook (pending deletion)
+└── tools/
+    ├── team-create.ts
+    ├── team-shutdown.ts
+    └── teammate-spawn.ts
+```
+
+`dynamic-teammate.ts` already implements the agent lifecycle pattern (`maybeSpawnTeammate`, `repairTeammateBinding`) using `runtime.config.loadConfig()` and `runtime.config.writeConfigFile()`. The planned `agent-manager.ts` would extract and formalize this interface.
 
 ### Key Interfaces
 
@@ -175,18 +195,22 @@ sequenceDiagram
 
 ## Migration Path
 
-| Phase | Actions |
-|-------|---------|
-| 1 | Create `agent-manager.ts`, update `types.ts` |
-| 2 | Refactor `teammate-spawn.ts`, `team-shutdown.ts` |
-| 3 | Delete `mailbox.ts`, `context-injection.ts`, `teammate-invoker.ts`, `reply-dispatcher.ts` |
-| 4 | Delete `send-message.ts`, `inbox.ts` |
-| 5 | Update tests |
+| Phase | Actions | Status |
+|-------|---------|--------|
+| 1 | Delete `mailbox.ts`, `teammate-invoker.ts`, `reply-dispatcher.ts`, `send-message.ts`, `inbox.ts` | COMPLETE |
+| 2 | Delete `context-injection.ts`, update `index.ts` | pending |
+| 3 | Create `agent-manager.ts`, refactor `teammate-spawn.ts`, `team-shutdown.ts` | pending |
+| 4 | Create `teammate-remove.ts` | pending |
+| 5 | Create task tools (`task-create.ts`, `task-list.ts`, `task-claim.ts`, `task-complete.ts`) | pending |
+| 6 | Update tests | pending |
 
 ## Success Criteria
 
-- [ ] All existing tests pass
-- [ ] `teammate_spawn` creates agents + bindings in openclaw.json
-- [ ] `team_shutdown` removes all agents + bindings
-- [ ] Messaging works via `sessions_send`
+- [ ] `context-injection.ts` deleted
+- [ ] `agent-manager.ts` created with `createAgent`/`removeAgent`/`listTeamAgents`
+- [ ] `teammate-spawn.ts` delegates to `agent-manager.ts`
+- [ ] `team-shutdown.ts` uses `agent-manager.ts` for batch removal
+- [ ] `teammate-remove.ts` tool created
+- [ ] Task tools created (`task-create`, `task-list`, `task-claim`, `task-complete`)
+- [ ] All tests pass
 - [ ] Code size reduced by ~50%
