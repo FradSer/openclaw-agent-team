@@ -2,6 +2,48 @@
 
 ## Component Diagram
 
+### Current State
+
+```mermaid
+graph TB
+    subgraph Tools["Tools Layer (current)"]
+        TC[team-create.ts]
+        TS[team-shutdown.ts]
+        TSp[teammate-spawn.ts]
+    end
+
+    subgraph Core["Core Layer (current)"]
+        DT[dynamic-teammate.ts<br/>Agent Lifecycle]
+        Ledger[ledger.ts<br/>Member Store]
+        CI[context-injection.ts<br/>pending deletion]
+        Channel[channel.ts]
+    end
+
+    subgraph Infrastructure["Infrastructure Layer"]
+        Storage[storage.ts]
+        Runtime[runtime.ts]
+    end
+
+    subgraph Foundation["Foundation Layer"]
+        Types[types.ts]
+    end
+
+    TC --> Storage
+    TS --> DT
+    TS --> Storage
+    TSp --> DT
+    TSp --> Ledger
+
+    DT --> Runtime
+    Ledger --> Storage
+    Storage --> Types
+
+    style CI fill:#f99
+    style DT fill:#9f9
+```
+
+### Target State
+
 ```mermaid
 graph TB
     subgraph Tools["Tools Layer"]
@@ -51,6 +93,28 @@ graph TB
 
 ## File Structure
 
+### Current State (2026-03-14)
+
+```
+packages/openclaw-agent-team/src/
+├── index.ts                    # Plugin entry point
+├── types.ts                    # TypeBox schemas
+├── ledger.ts                   # Member persistence (JSONL)
+├── storage.ts                  # Path resolution, directory ops
+├── runtime.ts                  # PluginRuntime singleton
+├── channel.ts                  # agent-team channel plugin
+├── dynamic-teammate.ts         # Agent lifecycle (maybeSpawnTeammate, repairTeammateBinding)
+├── context-injection.ts        # before_prompt_build hook (pending deletion)
+└── tools/
+    ├── team-create.ts
+    ├── team-shutdown.ts
+    └── teammate-spawn.ts
+```
+
+`dynamic-teammate.ts` already uses `runtime.config.loadConfig()` and `runtime.config.writeConfigFile()` — both are confirmed official public API from `PluginRuntimeCore` in `openclaw/plugin-sdk`.
+
+### Target State
+
 ```
 packages/openclaw-agent-team/src/
 ├── index.ts                    # Plugin entry point
@@ -81,9 +145,14 @@ packages/openclaw-agent-team/src/
 
 ### AgentManager
 
+`dynamic-teammate.ts` currently implements the agent lifecycle directly. The refactor extracts this into a formal `AgentManager` interface:
+
 ```typescript
 // core/agent-manager.ts
 import type { PluginRuntime } from "openclaw/plugin-sdk";
+
+// runtime.config.loadConfig() and runtime.config.writeConfigFile() are
+// official public API defined in PluginRuntimeCore from openclaw/plugin-sdk.
 
 export interface DynamicAgentConfig {
   agentId: string;
@@ -260,14 +329,14 @@ export function createAgentManager(runtime: PluginRuntime): AgentManager {
 ```
 ~/.openclaw/teams/{team-name}/
 ├── config.json         # Team configuration
-├── tasks.jsonl         # Task records
-├── members.jsonl       # Team member records
-├── dependencies.jsonl  # Task dependency records
+├── members.jsonl       # Team member records (ledger)
 └── agents/
     └── {teammateName}/
         ├── workspace/  # Teammate workspace
         └── agent/      # Teammate agent config
 ```
+
+Note: `tasks.jsonl` and `dependencies.jsonl` are part of the target design (task tools not yet created). The `inbox/` directory is used by `channel.ts` for inter-agent messaging.
 
 ### Config.json Schema
 

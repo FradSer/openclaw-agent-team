@@ -945,32 +945,35 @@ Feature: Task Complete
 
 ### Files to Remove
 
-- [ ] `src/mailbox.ts` - Remove messaging storage
-- [ ] `src/tools/send-message.ts` - Remove send_message tool
-- [ ] `src/tools/inbox.ts` - Remove inbox tool
-- [ ] `src/context-injection.ts` - Remove message injection hook
-- [ ] `src/teammate-invoker.ts` - Remove direct invocation
-- [ ] `src/reply-dispatcher.ts` - Remove reply dispatching
+- [x] `src/mailbox.ts` - DELETED
+- [x] `src/tools/send-message.ts` - DELETED
+- [x] `src/tools/inbox.ts` - DELETED
+- [x] `src/teammate-invoker.ts` - DELETED
+- [x] `src/reply-dispatcher.ts` - DELETED
+- [ ] `src/context-injection.ts` - pending deletion
 
 ### Files to Modify
 
-- [ ] `src/index.ts` - Remove messaging tool registrations and context hook
-- [ ] `src/tools/team-shutdown.ts` - Add directory deletion
-- [ ] `src/tools/teammate-spawn.ts` - Use AgentManager pattern
-- [ ] `src/storage.ts` - Add `deleteTeamDirectory` function
+- [ ] `src/index.ts` - Remove context injection hook registration
+- [ ] `src/tools/team-shutdown.ts` - Use AgentManager for batch removal
+- [ ] `src/tools/teammate-spawn.ts` - Delegate to AgentManager
 
 ### Files to Add
 
-- [ ] `src/core/agent-manager.ts` - Centralized agent lifecycle management
+- [ ] `src/core/agent-manager.ts` - Formalize agent lifecycle (currently in `dynamic-teammate.ts`)
+- [ ] `src/tools/teammate-remove.ts` - Remove single teammate
+- [ ] `src/tools/task-create.ts` - Task creation with dependency support
+- [ ] `src/tools/task-list.ts` - Task listing with filters
+- [ ] `src/tools/task-claim.ts` - Task claiming
+- [ ] `src/tools/task-complete.ts` - Task completion
 
 ### Tests to Update
 
-- [ ] Remove `tests/mailbox.test.ts`
-- [ ] Remove `tests/tools/send-message.test.ts`
-- [ ] Remove `tests/tools/inbox.test.ts`
-- [ ] Remove `tests/context-injection.test.ts`
-- [ ] Update `tests/tools/team-shutdown.test.ts` - Add directory deletion tests
+- [ ] Remove `tests/context-injection.test.ts` (if it exists)
+- [ ] Update `tests/tools/team-shutdown.test.ts` - Add AgentManager tests
 - [ ] Add `tests/core/agent-manager.test.ts`
+- [ ] Add `tests/tools/teammate-remove.test.ts`
+- [ ] Add task tool tests
 
 ---
 
