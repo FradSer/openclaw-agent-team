@@ -1,5 +1,5 @@
 import { readFile, writeFile, mkdir, stat } from "node:fs/promises";
-import { dirname } from "node:path";
+import { join, dirname } from "node:path";
 import type { TeammateDefinition } from "./types.js";
 
 interface MemberRecord {
@@ -54,11 +54,8 @@ export class TeamLedger {
   private membersCache: Map<string, MemberRecord> = new Map();
   private loaded = false;
 
-  constructor(dbPath: string) {
-    // dbPath is expected to be like ".../team-name/ledger.db"
-    // We'll store JSONL files in the same directory
-    const dir = dirname(dbPath);
-    this.membersPath = `${dir}/members.jsonl`;
+  constructor(teamDir: string) {
+    this.membersPath = join(teamDir, "members.jsonl");
   }
 
   /**

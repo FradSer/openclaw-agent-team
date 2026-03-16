@@ -39,7 +39,7 @@ export interface TeamShutdownTool {
   name: string;
   description: string;
   schema: typeof TeamShutdownSchema;
-  handler: (params: TeamShutdownParams) => Promise<TeamShutdownResponse | ToolError>;
+  handler: (params: TeamShutdownParams, callerAgentId?: string) => Promise<TeamShutdownResponse | ToolError>;
 }
 
 /**
@@ -51,7 +51,7 @@ export function createTeamShutdownTool(ctx: PluginContext): TeamShutdownTool {
     name: "team_shutdown",
     description: "Gracefully shuts down a team and notifies all teammates",
     schema: TeamShutdownSchema,
-    handler: async (params: TeamShutdownParams): Promise<TeamShutdownResponse | ToolError> => {
+    handler: async (params: TeamShutdownParams, _callerAgentId?: string): Promise<TeamShutdownResponse | ToolError> => {
       const { team_name } = params;
 
       // Check if team exists
@@ -87,8 +87,7 @@ export function createTeamShutdownTool(ctx: PluginContext): TeamShutdownTool {
       }
 
       // Open ledger to get teammates
-      const ledgerPath = join(ctx.teamsDir, team_name, "ledger.db");
-      const ledger = new TeamLedger(ledgerPath);
+      const ledger = new TeamLedger(join(ctx.teamsDir, team_name));
 
       try {
         const members = await ledger.listMembers();

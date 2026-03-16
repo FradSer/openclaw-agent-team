@@ -63,8 +63,7 @@ describe("dynamic-teammate module", () => {
     await writeTeamConfig(tempDir, teamName, config);
 
     // Create ledger
-    const ledgerPath = join(tempDir, teamName, "ledger.db");
-    ledger = new TeamLedger(ledgerPath);
+    ledger = new TeamLedger(join(tempDir, teamName));
   }
 
   describe("Given a valid spawn request", () => {

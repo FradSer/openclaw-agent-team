@@ -137,18 +137,18 @@ describe("Plugin Entry Point", () => {
         );
       });
 
-      it("Then should register team_shutdown tool", () => {
+      it("Then should register team_shutdown tool via factory (options.name identifies it)", () => {
         plugin.register(mockApi);
         expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "team_shutdown" }),
+          expect.any(Function),
           expect.objectContaining({ name: "team_shutdown" })
         );
       });
 
-      it("Then should register teammate_spawn tool", () => {
+      it("Then should register teammate_spawn tool via factory (options.name identifies it)", () => {
         plugin.register(mockApi);
         expect(mockApi.registerTool).toHaveBeenCalledWith(
-          expect.objectContaining({ name: "teammate_spawn" }),
+          expect.any(Function),
           expect.objectContaining({ name: "teammate_spawn" })
         );
       });
