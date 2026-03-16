@@ -87,7 +87,7 @@ export interface TeammateSpawnTool {
   name: string;
   description: string;
   schema: typeof TeammateSpawnSchema;
-  handler: (params: TeammateSpawnParams) => Promise<TeammateSpawnResponse | ToolError>;
+  handler: (params: TeammateSpawnParams, callerAgentId?: string) => Promise<TeammateSpawnResponse | ToolError>;
 }
 
 // Default max teammates per team
@@ -102,9 +102,9 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
     name: "teammate_spawn",
     description: "Spawns a new teammate agent within an existing team",
     schema: TeammateSpawnSchema,
-    handler: async (params: TeammateSpawnParams): Promise<TeammateSpawnResponse | ToolError> => {
+    handler: async (params: TeammateSpawnParams, callerAgentId?: string): Promise<TeammateSpawnResponse | ToolError> => {
       // Use per-team lock to prevent race conditions when spawning multiple teammates concurrently
-      return withTeamLock(params.team_name, () => spawnTeammateHandler(ctx, params));
+      return withTeamLock(params.team_name, () => spawnTeammateHandler(ctx, params, callerAgentId));
     },
   };
 }
@@ -114,7 +114,8 @@ export function createTeammateSpawnTool(ctx: PluginContext): TeammateSpawnTool {
  */
 async function spawnTeammateHandler(
   ctx: PluginContext,
-  params: TeammateSpawnParams
+  params: TeammateSpawnParams,
+  _callerAgentId?: string
 ): Promise<TeammateSpawnResponse | ToolError> {
   const { team_name, name, agent_type, model, tools } = params;
 
@@ -130,8 +131,7 @@ async function spawnTeammateHandler(
   }
 
   // Open ledger
-  const ledgerPath = join(ctx.teamsDir, team_name, "ledger.db");
-  const ledger = new TeamLedger(ledgerPath);
+  const ledger = new TeamLedger(join(ctx.teamsDir, team_name));
 
   try {
     const spawnParams: {

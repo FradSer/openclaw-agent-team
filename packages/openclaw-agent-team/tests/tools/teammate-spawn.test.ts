@@ -124,7 +124,7 @@ describe("teammate_spawn tool", () => {
         })) as TeammateSpawnResponse;
 
         // Open the ledger and check if the teammate was added
-        const ledger = new TeamLedger(join(tempDir, "ledger-test-team", "ledger.db"));
+        const ledger = new TeamLedger(join(tempDir, "ledger-test-team"));
         const members = await ledger.listMembers();
         ledger.close();
 
@@ -192,7 +192,7 @@ describe("teammate_spawn tool", () => {
 
         // Verify the spawnAgent API was called with tool restrictions
         // Check ledger for tools configuration
-        const ledger = new TeamLedger(join(tempDir, "tool-restrict-team", "ledger.db"));
+        const ledger = new TeamLedger(join(tempDir, "tool-restrict-team"));
         const members = await ledger.listMembers();
         ledger.close();
 
@@ -212,7 +212,7 @@ describe("teammate_spawn tool", () => {
           },
         })) as TeammateSpawnResponse;
 
-        const ledger = new TeamLedger(join(tempDir, "deny-list-team", "ledger.db"));
+        const ledger = new TeamLedger(join(tempDir, "deny-list-team"));
         const members = await ledger.listMembers();
         ledger.close();
 

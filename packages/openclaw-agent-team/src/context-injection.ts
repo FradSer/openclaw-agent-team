@@ -19,7 +19,7 @@ export interface AgentContext {
 }
 
 export interface HookResult {
-  prependContext?: string;
+  appendSystemContext?: string;
   systemPrompt?: string;
 }
 
@@ -60,17 +60,16 @@ function buildTeammateContext(
     }
   }
 
-  const exampleAgentId = buildTeammateAgentId(teamName, "<teammate_name>");
+  const exampleTarget = `${teamName}:<teammate_name>`;
   lines.push(
     ``,
     `**Communication:**`,
-    `Use the built-in \`sessions_send\` tool to message teammates directly.`,
-    `Example:`,
-    `  sessions_send({ agentId: "${exampleAgentId}", message: "your message" })`,
+    `Send messages to teammates via the agent-team channel using the target format \`"<teamName>:<teammateName>"\`.`,
+    `Example target: \`"${exampleTarget}"\``,
     ``,
     `**Key Responsibilities:**`,
     `1. Report to your team leader when you start or complete work`,
-    `2. Use sessions_send to coordinate with other teammates`,
+    `2. Use the agent-team channel to coordinate with other teammates`,
     `3. Communicate progress updates through direct messages`,
     `</teammate-context>`
   );
@@ -106,8 +105,7 @@ export function createTeammateContextHook(teamsDir: string, log: (msg: string) =
         return {};
       }
 
-      const ledgerPath = join(teamsDir, teamName, "ledger.db");
-      const ledger = new TeamLedger(ledgerPath);
+      const ledger = new TeamLedger(join(teamsDir, teamName));
 
       try {
         const members = await ledger.listMembers();
@@ -119,8 +117,8 @@ export function createTeammateContextHook(teamsDir: string, log: (msg: string) =
           return {};
         }
 
-        const prependContext = buildTeammateContext(teamConfig, teammate, teamName, members);
-        return { prependContext };
+        const appendSystemContext = buildTeammateContext(teamConfig, teammate, teamName, members);
+        return { appendSystemContext };
       } finally {
         ledger.close();
       }

@@ -547,7 +547,7 @@ type PluginHookAfterCompactionEvent = {
 
 type PluginHookBeforeResetEvent = {
   sessionFile?: string;
-  messages?: string[];
+  messages?: unknown[];
   reason?: string;
 };
 ```

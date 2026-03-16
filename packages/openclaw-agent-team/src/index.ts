@@ -1,12 +1,13 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readdir } from "node:fs/promises";
-import type { TSchema } from "@sinclair/typebox";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import { jsonResult } from "openclaw/plugin-sdk";
 import type { PluginRuntime } from "openclaw/plugin-sdk";
 import { AgentTeamConfigSchema, AGENT_TEAM_CHANNEL } from "./types.js";
 import { createTeamCreateTool, type TeamCreateParams } from "./tools/team-create.js";
-import { createTeamShutdownTool } from "./tools/team-shutdown.js";
-import { createTeammateSpawnTool } from "./tools/teammate-spawn.js";
+import { createTeamShutdownTool, type TeamShutdownParams } from "./tools/team-shutdown.js";
+import { createTeammateSpawnTool, type TeammateSpawnParams } from "./tools/teammate-spawn.js";
 import { TeamLedger } from "./ledger.js";
 import { teamDirectoryExists, resolveTeammatePaths } from "./storage.js";
 import { setAgentTeamRuntime } from "./runtime.js";
@@ -17,51 +18,6 @@ import { createTeammateContextHook } from "./context-injection.js";
 export const PLUGIN_ID = "openclaw-agent-team";
 export const PLUGIN_NAME = "Agent Team";
 export const PLUGIN_DESCRIPTION = "Multi-agent team coordination with messaging";
-
-// SDK context available in tool factories — populated per agent session
-interface OpenClawPluginToolContext {
-  agentId?: string;
-  sessionKey?: string;
-  sessionId?: string;
-  workspaceDir?: string;
-  agentDir?: string;
-}
-
-// OpenClaw Plugin API types (matching clawdbot-feishu pattern)
-interface OpenClawPluginApi {
-  registerTool(
-    tool:
-      | {
-          name: string;
-          label: string;
-          description: string;
-          parameters: TSchema;
-          execute: (toolCallId: string, params: unknown) => Promise<unknown>;
-        }
-      | ((ctx: OpenClawPluginToolContext) => {
-          name: string;
-          label: string;
-          description: string;
-          parameters: TSchema;
-          execute: (toolCallId: string, params: unknown) => Promise<unknown>;
-        } | null | undefined),
-    options: { name: string }
-  ): void;
-  registerChannel(params: { plugin: unknown }): void;
-  on(event: string, handler: (event: unknown, ctx: unknown) => Promise<unknown>): void;
-  logger: {
-    info: (message: string) => void;
-    error: (message: string) => void;
-    warn: (message: string) => void;
-    debug?: (message: string) => void;
-  };
-  pluginConfig?: {
-    maxTeammatesPerTeam?: number;
-    defaultAgentType?: string;
-    teamsDir?: string;
-  };
-  runtime: PluginRuntime;
-}
 
 // Plugin context for tools
 export interface PluginContext {
@@ -89,7 +45,7 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
   // Get plugin config from api.pluginConfig
   const pluginConfig = api.pluginConfig;
 
-  const teamsDir = pluginConfig?.teamsDir || join(homedir(), ".openclaw", "teams");
+  const teamsDir = (pluginConfig?.["teamsDir"] as string | undefined) ?? join(homedir(), ".openclaw", "teams");
 
   // Cache for team ledgers
   const ledgerCache = new Map<string, TeamLedger>();
@@ -97,14 +53,13 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
   return {
     teamsDir,
     config: {
-      maxTeammatesPerTeam: pluginConfig?.maxTeammatesPerTeam ?? 10,
-      defaultAgentType: pluginConfig?.defaultAgentType ?? "general-purpose",
+      maxTeammatesPerTeam: (pluginConfig?.["maxTeammatesPerTeam"] as number | undefined) ?? 10,
+      defaultAgentType: (pluginConfig?.["defaultAgentType"] as string | undefined) ?? "general-purpose",
     },
     getTeamLedger(teamName: string): TeamLedger {
       let ledger = ledgerCache.get(teamName);
       if (!ledger) {
-        const dbPath = join(teamsDir, teamName, "ledger.db");
-        ledger = new TeamLedger(dbPath);
+        ledger = new TeamLedger(join(teamsDir, teamName));
         ledgerCache.set(teamName, ledger);
       }
       return ledger;
@@ -115,81 +70,85 @@ function createPluginContext(api: OpenClawPluginApi): PluginContext {
   };
 }
 
+type ToolContext = { agentId?: string; sessionKey?: string; [key: string]: unknown };
+type ToolFactory = (ctx: ToolContext) => object;
+
 /**
- * Registers a tool with OpenClaw (matching clawdbot-feishu pattern)
+ * Registers a factory-based tool with OpenClaw so the handler receives the caller agentId.
  */
-function registerTool<P>(
+function registerToolFactory(
   api: OpenClawPluginApi,
-  spec: {
-    name: string;
-    label: string;
-    description: string;
-    parameters: TSchema;
-    run: (params: P) => Promise<unknown>;
-  }
+  factory: ToolFactory,
+  name: string
 ): void {
-  api.registerTool(
-    {
-      name: spec.name,
-      label: spec.label,
-      description: spec.description,
-      parameters: spec.parameters,
-      async execute(_toolCallId: string, params: unknown) {
-        try {
-          return await spec.run(params as P);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          return { error: { code: "EXECUTION_ERROR", message } };
-        }
-      },
-    },
-    { name: spec.name }
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  api.registerTool(factory as any, { name });
 }
 
 /**
- * Registers all team management tools.
+ * Registers all team management tools using the factory pattern so each handler
+ * receives the caller's agentId from the SDK tool context.
  */
 function registerTeamTools(api: OpenClawPluginApi, ctx: PluginContext): void {
-  // team_create uses factory registration so the handler receives the caller's agentId,
-  // which becomes the team lead. The factory is invoked per agent session by the SDK.
   const teamCreateTool = createTeamCreateTool(ctx);
-  api.registerTool(
-    (sdkCtx: OpenClawPluginToolContext) => ({
+  registerToolFactory(
+    api,
+    (sdkCtx: ToolContext) => ({
       name: "team_create",
       label: teamCreateTool.label,
       description: teamCreateTool.description,
       parameters: teamCreateTool.schema,
       async execute(_toolCallId: string, params: unknown) {
         try {
-          return await teamCreateTool.handler(params as TeamCreateParams, sdkCtx?.agentId);
+          return jsonResult(await teamCreateTool.handler(params as TeamCreateParams, sdkCtx?.agentId));
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          return { error: { code: "EXECUTION_ERROR", message } };
+          return jsonResult({ error: { code: "EXECUTION_ERROR", message } });
         }
       },
     }),
-    { name: "team_create" }
+    "team_create"
   );
 
   const teamShutdownTool = createTeamShutdownTool(ctx);
-  registerTool(api, {
-    name: "team_shutdown",
-    label: "Team Shutdown",
-    description: "Gracefully shuts down a team and notifies all teammates",
-    parameters: teamShutdownTool.schema,
-    run: (params) => teamShutdownTool.handler(params as never),
-  });
+  registerToolFactory(
+    api,
+    (sdkCtx: ToolContext) => ({
+      name: "team_shutdown",
+      label: teamShutdownTool.label,
+      description: teamShutdownTool.description,
+      parameters: teamShutdownTool.schema,
+      async execute(_toolCallId: string, params: unknown) {
+        try {
+          return jsonResult(await teamShutdownTool.handler(params as TeamShutdownParams, sdkCtx?.agentId));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return jsonResult({ error: { code: "EXECUTION_ERROR", message } });
+        }
+      },
+    }),
+    "team_shutdown"
+  );
 
-  // Teammate management tools
   const teammateSpawnTool = createTeammateSpawnTool(ctx);
-  registerTool(api, {
-    name: "teammate_spawn",
-    label: "Teammate Spawn",
-    description: "Spawns a new teammate agent within an existing team",
-    parameters: teammateSpawnTool.schema,
-    run: (params) => teammateSpawnTool.handler(params as never),
-  });
+  registerToolFactory(
+    api,
+    (sdkCtx: ToolContext) => ({
+      name: "teammate_spawn",
+      label: teammateSpawnTool.label,
+      description: teammateSpawnTool.description,
+      parameters: teammateSpawnTool.schema,
+      async execute(_toolCallId: string, params: unknown) {
+        try {
+          return jsonResult(await teammateSpawnTool.handler(params as TeammateSpawnParams, sdkCtx?.agentId));
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return jsonResult({ error: { code: "EXECUTION_ERROR", message } });
+        }
+      },
+    }),
+    "teammate_spawn"
+  );
 }
 
 // Re-export types and utilities for external use
@@ -224,6 +183,7 @@ async function syncTeammatesToConfig(
     const existingAgentIds = new Set((cfg.agents?.list ?? []).map(a => a.id));
     const agentsToAdd: Array<{
       agentId: string;
+      name: string;
       teamName: string;
       memberName: string;
       workspace: string;
@@ -243,8 +203,7 @@ async function syncTeammatesToConfig(
         continue;
       }
 
-      const ledgerPath = join(teamsDir, teamName, "ledger.db");
-      const ledger = new TeamLedger(ledgerPath);
+      const ledger = new TeamLedger(join(teamsDir, teamName));
 
       try {
         const members = await ledger.listMembers();
@@ -258,6 +217,7 @@ async function syncTeammatesToConfig(
             const { workspace, agentDir } = resolveTeammatePaths(teamsDir, teamName, member.name);
             agentsToAdd.push({
               agentId: member.agentId,
+              name: member.name,
               teamName,
               memberName: member.name,
               workspace,
@@ -298,6 +258,7 @@ async function syncTeammatesToConfig(
           ...(currentCfg.agents?.list ?? []),
           ...newAgents.map(a => ({
             id: a.agentId,
+            name: a.name,
             workspace: a.workspace,
             agentDir: a.agentDir,
           })),
@@ -332,35 +293,26 @@ const agentTeamPlugin = {
   description: PLUGIN_DESCRIPTION,
   configSchema: AgentTeamConfigSchema,
 
-  // Note: register must NOT be async
   register(api: OpenClawPluginApi) {
-    // Initialize runtime singleton for use by tools
     setAgentTeamRuntime(api.runtime);
 
     const ctx = createPluginContext(api);
 
-    api.logger.info(`[agent-team] Plugin config: teamsDir=${ctx.teamsDir}, pluginConfig.teamsDir=${api.pluginConfig?.teamsDir || "not set"}`);
+    api.logger.info(`[agent-team] Plugin config: teamsDir=${ctx.teamsDir}, pluginConfig.teamsDir=${api.pluginConfig?.["teamsDir"] ?? "not set"}`);
 
-    // Register channel plugin (KEY CHANGE for teammate invocation)
     api.registerChannel({ plugin: agentTeamChannelPlugin });
 
-    // Sync teammates on startup (async, non-blocking)
     const safeLog = (msg: string) => {
       try {
         api.logger.info(msg);
       } catch {
-        // Ignore logging errors
+        // ignore
       }
     };
-    // Use setTimeout to ensure sync doesn't block plugin registration
-    setTimeout(() => {
-      syncTeammatesToConfig(api.runtime, ctx.teamsDir, safeLog).catch(() => {});
-    }, 100);
+    void syncTeammatesToConfig(api.runtime, ctx.teamsDir, safeLog);
 
-    // Register all tools
     registerTeamTools(api, ctx);
 
-    // Register before_prompt_build hook for teammate context injection
     const teammateContextHook = createTeammateContextHook(ctx.teamsDir, (msg) => api.logger.error(msg));
     api.on("before_prompt_build", teammateContextHook);
 
